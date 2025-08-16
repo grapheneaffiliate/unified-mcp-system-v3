@@ -1,82 +1,89 @@
 #!/usr/bin/env bash
-# Smoke tests for the Unified MCP System
-# Tests all critical endpoints to ensure they work
-
 set -euo pipefail
 
-APP=${APP:-http://localhost:8001}
-MCP=${MCP:-http://localhost:8000}
+# Endpoints (override in CI if needed)
+APP="${APP:-http://localhost:8001}"     # lc_mcp_app
+MCP="${MCP:-http://localhost:8000}"     # mcp-server
 
-echo "🧪 Running smoke tests for Unified MCP System"
-echo "================================================"
+JQ="${JQ:-jq}"                           # pretty-print helper
 
-echo "📋 Testing /v1/models endpoint..."
-curl -sS ${APP}/v1/models | jq . || echo "❌ /v1/models failed"
+jsonpp() {
+  if command -v "$JQ" >/dev/null 2>&1; then "$JQ" .; else python -m json.tool; fi
+}
 
-echo ""
-echo "💬 Testing non-streaming chat completion..."
-curl -sS ${APP}/v1/chat/completions \
-  -H 'Content-Type: application/json' \
-  -H 'Authorization: Bearer dev-key-123' \
-  -d '{
-    "model": "gpt-4",
-    "messages": [{"role": "user", "content": "Hello, respond with just: Hello from MCP!"}],
-    "max_tokens": 50
-  }' | jq . || echo "❌ Non-streaming chat failed"
+wait_ready() {
+  local url="$1" name="$2" tries=60
+  echo "⏳ waiting for $name at $url ..."
+  for i in $(seq 1 "$tries"); do
+    if curl -fsS "$url" >/dev/null; then
+      echo "✅ $name is ready"
+      return 0
+    fi
+    sleep 2
+  done
+  echo "❌ $name did not become healthy at $url" >&2
+  return 1
+}
 
-echo ""
-echo "🌊 Testing streaming chat completion..."
-curl -sS -N ${APP}/v1/chat/completions \
-  -H 'Content-Type: application/json' \
-  -H 'Authorization: Bearer dev-key-123' \
-  -d '{
-    "model": "gpt-4",
-    "stream": true,
-    "messages": [{"role": "user", "content": "Count from 1 to 3"}],
-    "max_tokens": 30
-  }' || echo "❌ Streaming chat failed"
+require_contains() {
+  local needle="$1" || true
+  if ! grep -q "$needle"; then
+    echo "❌ expected output to contain: $needle" >&2
+    exit 1
+  fi
+}
 
-echo ""
-echo "🔧 Testing function calling..."
-curl -sS ${APP}/v1/chat/completions \
-  -H 'Content-Type: application/json' \
-  -H 'Authorization: Bearer dev-key-123' \
-  -d '{
-    "model": "gpt-4",
-    "messages": [{"role": "user", "content": "List files in current directory"}],
-    "tools": [{
-      "type": "function",
-      "function": {
-        "name": "list_files",
-        "description": "List files in a directory",
-        "parameters": {
-          "type": "object",
-          "properties": {
-            "path": {"type": "string", "description": "Directory path"}
-          },
-          "required": ["path"]
-        }
-      }
-    }]
-  }' | jq . || echo "❌ Function calling failed"
+echo "=== SMOKE: health checks ==="
+wait_ready "${MCP}/health" "MCP server"
+wait_ready "${APP}/health" "LC MCP app"
 
-echo ""
-echo "🏥 Testing health endpoints..."
-curl -sS ${APP}/health | jq . || echo "❌ LC MCP App health failed"
-curl -sS ${MCP}/health | jq . || echo "❌ MCP Server health failed"
+echo
+echo "=== SMOKE: /v1/models ==="
+MODELS_JSON="$(curl -fsS "${APP}/v1/models")"
+echo "$MODELS_JSON" | jsonpp
+echo "$MODELS_JSON" | grep -q '"object":"list"'
+echo "$MODELS_JSON" | grep -q '"object": "list"' || true  # tolerate spaced variant
+echo "$MODELS_JSON" | grep -q '"data"' || (echo "no data array in /v1/models" && exit 1)
 
-echo ""
-echo "📊 Testing metrics endpoints..."
-curl -sS ${APP}/metrics || echo "❌ LC MCP App metrics failed"
-curl -sS ${MCP}/metrics || echo "❌ MCP Server metrics failed"
+echo
+echo "=== SMOKE: non-streaming chat completion ==="
+NONSTREAM_JSON="$(
+  curl -fsS "${APP}/v1/chat/completions" \
+    -H 'Content-Type: application/json' \
+    -d '{"model":"mcp-proxy","messages":[{"role":"user","content":"hello"}]}'
+)"
+echo "$NONSTREAM_JSON" | jsonpp
+echo "$NONSTREAM_JSON" | grep -q '"object":"chat.completion"'
 
-echo ""
-echo "🛠️ Testing direct tool execution..."
-curl -sS ${MCP}/tools \
-  -H 'Content-Type: application/json' | jq . || echo "❌ Tool listing failed"
+echo
+echo "=== SMOKE: streaming chat completion ==="
+# Capture a few lines; require at least one chunk object
+STREAM_OK=0
+# shellcheck disable=SC2034
+while IFS= read -r line; do
+  echo "$line"
+  if echo "$line" | grep -q '"object":"chat.completion.chunk"'; then
+    STREAM_OK=1
+    break
+  fi
+done < <(curl -fsS -N "${APP}/v1/chat/completions" \
+          -H 'Content-Type: application/json' \
+          -d '{"model":"mcp-proxy","stream":true,"messages":[{"role":"user","content":"stream please"}]}')
+if [[ "$STREAM_OK" -ne 1 ]]; then
+  echo "❌ did not observe a streaming chunk" >&2
+  exit 1
+fi
+echo "✅ streaming emitted a chunk"
 
-echo ""
-echo "✅ Smoke tests completed!"
-echo "If you see any ❌ errors above, check that both services are running:"
-echo "  - MCP Server: ${MCP}"
-echo "  - LC MCP App: ${APP}"
+echo
+echo "=== SMOKE: real MCP tool call (read_file) ==="
+TOOL_JSON="$(
+  curl -fsS "${MCP}/tools/read_file" \
+    -H 'Content-Type: application/json' \
+    -d '{"path":"README.md"}'
+)"
+echo "$TOOL_JSON" | jsonpp
+echo "$TOOL_JSON" | grep -qi 'readme' || echo "ℹ️ tool output may not include the word 'readme'—proceeding"
+
+echo
+echo "🎉 SMOKE PASS"

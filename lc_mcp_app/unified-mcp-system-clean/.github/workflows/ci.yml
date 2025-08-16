@@ -72,9 +72,15 @@ jobs:
         run: |
           chmod +x examples/smoke.sh
           bash examples/smoke.sh
+        env:
+          APP: http://localhost:8001
+          MCP: http://localhost:8000
 
       - name: Run integration tests
         run: pytest tests/integration/ -v
+        env:
+          MCP_SERVER_URL: http://localhost:8000
+          MCP_HEALTH_URL: http://localhost:8000/health
 
       - name: Stop services
         if: always()

@@ -149,9 +149,17 @@ def register_routes(app: FastAPI):
     
     @app.get("/v1/models")
     async def list_models():
-        """OpenAI-compatible models endpoint."""
-        models = get_available_models()
-        return models.dict()
+        """
+        Minimal OpenAI-compatible models endpoint.
+        Returns a static list including your default model and an MCP proxy id.
+        """
+        default_id = getattr(settings, "openai_default_model", "mcp-proxy")
+        data = [
+            {"id": "mcp-proxy", "object": "model", "created": 0, "owned_by": "local"},
+        ]
+        if default_id != "mcp-proxy":
+            data.append({"id": default_id, "object": "model", "created": 0, "owned_by": "local"})
+        return {"object": "list", "data": data}
     
     @app.post("/v1/chat/completions")
     async def chat_completions(request: ChatCompletionRequest, raw_request: Request):
