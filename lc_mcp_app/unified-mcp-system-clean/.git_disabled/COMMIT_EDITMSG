@@ -1,0 +1,26 @@
+feat: implement rock-solid production hardening
+
+Final GPT-5 improvements for enterprise deployment:
+
+- Docker Compose security hardening:
+  * Read-only filesystem with tmpfs for /tmp
+  * Explicit write volumes only where needed (/app/data, /app/logs)
+  * All services run as non-root (10001:10001)
+  * Full capability dropping and security options
+
+- Prometheus configuration:
+  * Proper job names (mcp_server, lc_mcp_app)
+  * Correct service discovery for Docker network
+  * Optimized scrape intervals
+
+- MCP specification compliance:
+  * Add tests/mcp_contract/test_spec.py for contract validation
+  * JSON Schema validation for all tools
+  * Safe tool execution testing
+
+- Enhanced smoke testing:
+  * Comprehensive endpoint coverage
+  * Function calling validation
+  * Health and metrics verification
+
+System is now rock-solid and ready for production deployment.
