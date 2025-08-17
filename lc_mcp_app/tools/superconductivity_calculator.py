@@ -4,7 +4,9 @@ Tool for calculating the superconducting critical temperature (Tc).
 
 import math
 from typing import Any
+
 from .base import BaseTool
+
 
 class SuperconductivityCalculatorTool(BaseTool):
     """
@@ -61,7 +63,7 @@ class SuperconductivityCalculatorTool(BaseTool):
         exponent_numerator = 1.04 * (1 + lambda_total)
         exponent_denominator = lambda_total - mu_star * (1 + 0.62 * lambda_total)
         exponent = -exponent_numerator / exponent_denominator
-        
+
         tc = (f1 * f2 * omega_log / 1.2) * math.exp(exponent)
 
         return {

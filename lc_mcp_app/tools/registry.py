@@ -8,9 +8,8 @@ from typing import Any
 from ..clients.mcp_client import MCPClientError, get_mcp_client
 from ..middleware.metrics import record_error, record_tool_execution
 from ..observability.logging import get_logger
-from .superconductivity_calculator import SuperconductivityCalculatorTool
-
 from .base import BaseTool
+from .superconductivity_calculator import SuperconductivityCalculatorTool
 
 logger = get_logger("tools.registry")
 

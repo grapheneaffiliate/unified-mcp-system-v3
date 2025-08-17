@@ -4,6 +4,7 @@ Base classes for tools.
 
 from typing import Any
 
+
 class BaseTool:
     """Base class for all tools."""
 
