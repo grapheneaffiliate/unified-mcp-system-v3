@@ -2,8 +2,9 @@
 Tool registry for dynamic tool discovery and management.
 """
 
+from __future__ import annotations
 import time
-from typing import Any
+from typing import Any, Iterable, Mapping
 
 from ..clients.mcp_client import MCPClientError, get_mcp_client
 from ..middleware.metrics import record_error, record_tool_execution
