@@ -3,8 +3,6 @@ from __future__ import annotations
 import math
 from typing import TypedDict
 
-from .base import BaseTool
-
 
 class TcResult(TypedDict):
     tc_k: float

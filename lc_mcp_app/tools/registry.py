@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import time
 
-from ..clients.mcp_client import MCPClientError, get_mcp_client
+from ..clients.mcp_client import MCPClientError
 from ..middleware.metrics import record_error, record_tool_execution
 from ..observability.logging import get_logger
 from .base import BaseTool
