@@ -3,7 +3,8 @@ Prometheus metrics for monitoring and observability.
 """
 
 import time
-from typing import Any, Callable, TypeVar
+from collections.abc import Callable
+from typing import Any, TypeVar
 
 from prometheus_client import (
     CONTENT_TYPE_LATEST,

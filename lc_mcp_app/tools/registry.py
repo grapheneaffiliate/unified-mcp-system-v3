@@ -6,7 +6,6 @@ from typing import Any
 from ..clients.mcp_client import MCPClientError
 from ..middleware.metrics import record_error, record_tool_execution
 from ..observability.logging import get_logger
-from .base import BaseTool
 from .superconductivity_calculator import SuperconductivityCalculatorTool
 
 logger = get_logger("tools.registry")
@@ -31,7 +30,7 @@ def execute_tool(name: str, params: dict[str, Any]) -> dict[str, Any]:
         result = get_tool(name)(params)
         record_tool_execution(name, "success", time.time() - t0)
         return result
-    except MCPClientError as exc:
+    except MCPClientError:
         record_error("MCPClientError", "tool")
         logger.exception("Tool execution failed: %s", name)
         raise
