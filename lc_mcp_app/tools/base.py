@@ -1,7 +1,14 @@
 from __future__ import annotations
-from typing import Any, Protocol, Mapping
+
+from collections.abc import Mapping
+from typing import Any, Protocol
+
 
 class BaseTool(Protocol):
-    name: str
+    """Common interface for tool adapters."""
 
-    def run(self, **kwargs: Any) -> Mapping[str, Any]: ...
+    name: str
+    description: str
+
+    def __call__(self, params: Mapping[str, Any]) -> Any:  # pragma: no cover
+        ...

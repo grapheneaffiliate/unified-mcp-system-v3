@@ -1,51 +1,37 @@
 from __future__ import annotations
+
 import math
-from typing import Any, Mapping, TypedDict
+from typing import TypedDict
 
 from .base import BaseTool
 
-class TcResult(TypedDict):
-    tc: float
-    details: dict[str, float]
 
-class SuperconductivityCalculatorTool(BaseTool):
-    """
-    Calculates the superconducting critical temperature (Tc) using the
-    McMillan-Allen-Dynes formula with plasmonic correction.
+class TcResult(TypedDict):
+    tc_k: float
+    method: str
+
+
+class SuperconductivityCalculatorTool:
+    """Estimate Tc using the Allen–Dynes (McMillan) formula.
+
+    Expected params:
+      - lambda: electron-phonon coupling constant (λ)
+      - mu_star: Coulomb pseudopotential μ* (default 0.13)
+      - theta_log: logarithmic-averaged phonon temperature (K)
     """
 
     name = "superconductivity_calculator"
+    description = "Estimate superconducting Tc via Allen–Dynes formula."
 
-    def run(
-        self,
-        *,
-        lambda_ep: float,
-        lambda_pl: float,
-        mu_star: float,
-        omega_log: float,
-        t_c_cap: float | None = None,
-    ) -> TcResult:
-        """Allen–Dynes/McMillan style estimate with plasmonic correction."""
-        lambda_total = lambda_ep + lambda_pl
+    def __call__(self, params: dict[str, float]) -> TcResult:
+        lam = float(params["lambda"])
+        mu_star = float(params.get("mu_star", 0.13))
+        theta_log = float(params["theta_log"])
 
-        f1 = (1 + (lambda_total / 2.46)) ** (1 / 3)
-        f2 = 1 + ((omega_log / 1000.0) - 1) * (lambda_total ** 2) / (lambda_total ** 2 + 3.0)
+        denom = 1.04 * (1.0 + lam) - lam * mu_star * (1.0 + 0.62 * lam)
+        # Guard against division/pathological values
+        if denom <= 0:
+            return {"tc_k": 0.0, "method": "allen-dynes"}
 
-        exponent_numerator = 1.04 * (1 + lambda_total)
-        exponent_denominator = lambda_total - mu_star * (1 + 0.62 * lambda_total)
-        exponent = -exponent_numerator / exponent_denominator
-
-        tc = (f1 * f2 * omega_log / 1.2) * math.exp(exponent)
-
-        if t_c_cap is not None:
-            tc = min(tc, t_c_cap)
-
-        return TcResult(
-            tc=tc,
-            details={
-                "lambda_total": lambda_total,
-                "f1": f1,
-                "f2": f2,
-                "exponent": exponent,
-            },
-        )
+        tc = (theta_log / 1.2) * math.exp(-1.04 * (1.0 + lam) / denom)
+        return {"tc_k": float(tc), "method": "allen-dynes"}
