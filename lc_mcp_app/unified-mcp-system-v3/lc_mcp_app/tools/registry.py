@@ -8,21 +8,11 @@ from typing import Any
 from ..clients.mcp_client import MCPClientError, get_mcp_client
 from ..middleware.metrics import record_error, record_tool_execution
 from ..observability.logging import get_logger
+from .superconductivity_calculator import SuperconductivityCalculatorTool
+
+from .base import BaseTool
 
 logger = get_logger("tools.registry")
-
-
-class BaseTool:
-    """Base class for all tools."""
-
-    def __init__(self, name: str, description: str, schema: dict[str, Any]):
-        self.name = name
-        self.description = description
-        self.schema = schema
-
-    async def run(self, **kwargs) -> Any:
-        """Execute the tool with given parameters."""
-        raise NotImplementedError
 
 
 class RemoteTool(BaseTool):
@@ -181,6 +171,9 @@ registry = ToolRegistry()
 async def initialize_tools():
     """Initialize tools by discovering from MCP server."""
     logger.info("Initializing tool registry")
+
+    # Register local tools
+    registry.register(SuperconductivityCalculatorTool())
 
     # Discover and register MCP tools
     await registry.discover_mcp_tools()
