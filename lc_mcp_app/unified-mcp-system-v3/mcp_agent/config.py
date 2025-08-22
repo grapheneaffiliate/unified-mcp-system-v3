@@ -90,7 +90,7 @@ class Settings(BaseSettings):
     )
 
     @validator("sandbox_dir", "jupyter_notebooks_dir", pre=True)
-    def ensure_path_exists(cls, v):
+    def ensure_path_exists(cls, v: str | Path) -> Path:
         """Ensure directories exist."""
         if isinstance(v, str):
             v = Path(v)
@@ -98,14 +98,14 @@ class Settings(BaseSettings):
         return v
 
     @validator("environment")
-    def validate_environment(cls, v):
+    def validate_environment(cls, v: str) -> str:
         """Validate environment setting."""
         if v not in ["development", "production", "testing"]:
             raise ValueError("Environment must be 'development', 'production', or 'testing'")
         return v
 
     @validator("log_level")
-    def validate_log_level(cls, v):
+    def validate_log_level(cls, v: str) -> str:
         """Validate log level."""
         valid_levels = ["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"]
         if v.upper() not in valid_levels:

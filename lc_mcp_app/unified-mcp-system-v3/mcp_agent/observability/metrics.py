@@ -3,6 +3,8 @@ Prometheus metrics for monitoring and observability.
 """
 
 import time
+from collections.abc import Callable
+from typing import Any, TypeVar
 
 from prometheus_client import (
     CONTENT_TYPE_LATEST,
@@ -14,6 +16,8 @@ from prometheus_client import (
 from prometheus_client.core import CollectorRegistry
 
 from ..config import settings
+
+F = TypeVar('F', bound=Callable[..., Any])
 
 # Global registry for metrics
 registry = CollectorRegistry()
@@ -97,10 +101,10 @@ external_service_duration = Histogram(
 class MetricsCollector:
     """Centralized metrics collection."""
 
-    def __init__(self):
+    def __init__(self) -> None:
         self.setup_app_info()
 
-    def setup_app_info(self):
+    def setup_app_info(self) -> None:
         """Set up application information metrics."""
         app_info.info({
             "version": "1.0.0",
@@ -108,7 +112,7 @@ class MetricsCollector:
             "python_version": "3.11+",
         })
 
-    def record_request(self, method: str, endpoint: str, status_code: int, duration: float):
+    def record_request(self, method: str, endpoint: str, status_code: int, duration: float) -> None:
         """Record HTTP request metrics."""
         request_count.labels(
             method=method,
@@ -121,7 +125,7 @@ class MetricsCollector:
             endpoint=endpoint
         ).observe(duration)
 
-    def record_tool_execution(self, tool_name: str, status: str, duration: float):
+    def record_tool_execution(self, tool_name: str, status: str, duration: float) -> None:
         """Record tool execution metrics."""
         tool_execution_count.labels(
             tool_name=tool_name,
@@ -132,14 +136,14 @@ class MetricsCollector:
             tool_name=tool_name
         ).observe(duration)
 
-    def record_error(self, error_type: str, component: str):
+    def record_error(self, error_type: str, component: str) -> None:
         """Record error metrics."""
         error_count.labels(
             error_type=error_type,
             component=component
         ).inc()
 
-    def record_database_operation(self, operation: str, table: str, duration: float):
+    def record_database_operation(self, operation: str, table: str, duration: float) -> None:
         """Record database operation metrics."""
         database_operations.labels(
             operation=operation,
@@ -151,7 +155,7 @@ class MetricsCollector:
             table=table
         ).observe(duration)
 
-    def record_external_service_request(self, service: str, status: str, duration: float):
+    def record_external_service_request(self, service: str, status: str, duration: float) -> None:
         """Record external service request metrics."""
         external_service_requests.labels(
             service=service,
@@ -178,7 +182,7 @@ def setup_metrics() -> None:
     pass
 
 
-def get_metrics_content() -> tuple[str, str]:
+def get_metrics_content() -> tuple[bytes, str]:
     """Get Prometheus metrics content."""
     return generate_latest(registry), CONTENT_TYPE_LATEST
 
@@ -186,11 +190,11 @@ def get_metrics_content() -> tuple[str, str]:
 class MetricsMiddleware:
     """FastAPI middleware for automatic metrics collection."""
 
-    def __init__(self, app):
+    def __init__(self, app: Any) -> None:
         self.app = app
         self.metrics = get_metrics()
 
-    async def __call__(self, scope, receive, send):
+    async def __call__(self, scope: Any, receive: Any, send: Any) -> None:
         if scope["type"] != "http":
             await self.app(scope, receive, send)
             return
@@ -200,7 +204,7 @@ class MetricsMiddleware:
         path = scope["path"]
         status_code = 500  # Default to error
 
-        async def send_wrapper(message):
+        async def send_wrapper(message: Any) -> None:
             nonlocal status_code
             if message["type"] == "http.response.start":
                 status_code = message["status"]
@@ -222,12 +226,12 @@ class MetricsMiddleware:
 class ToolMetricsDecorator:
     """Decorator for automatic tool metrics collection."""
 
-    def __init__(self, tool_name: str):
+    def __init__(self, tool_name: str) -> None:
         self.tool_name = tool_name
         self.metrics = get_metrics()
 
-    def __call__(self, func):
-        async def async_wrapper(*args, **kwargs):
+    def __call__(self, func: F) -> F:
+        async def async_wrapper(*args: Any, **kwargs: Any) -> Any:
             start_time = time.time()
             status = "success"
 
@@ -245,7 +249,7 @@ class ToolMetricsDecorator:
                 duration = time.time() - start_time
                 self.metrics.record_tool_execution(self.tool_name, status, duration)
 
-        def sync_wrapper(*args, **kwargs):
+        def sync_wrapper(*args: Any, **kwargs: Any) -> Any:
             start_time = time.time()
             status = "success"
 
@@ -266,12 +270,12 @@ class ToolMetricsDecorator:
         # Return appropriate wrapper based on function type
         import asyncio
         if asyncio.iscoroutinefunction(func):
-            return async_wrapper
+            return async_wrapper  # type: ignore[return-value]
         else:
-            return sync_wrapper
+            return sync_wrapper  # type: ignore[return-value]
 
 
-def tool_metrics(tool_name: str):
+def tool_metrics(tool_name: str) -> ToolMetricsDecorator:
     """Decorator for tool metrics collection."""
     return ToolMetricsDecorator(tool_name)
 
@@ -279,13 +283,13 @@ def tool_metrics(tool_name: str):
 class DatabaseMetricsDecorator:
     """Decorator for database operation metrics."""
 
-    def __init__(self, operation: str, table: str):
+    def __init__(self, operation: str, table: str) -> None:
         self.operation = operation
         self.table = table
         self.metrics = get_metrics()
 
-    def __call__(self, func):
-        def wrapper(*args, **kwargs):
+    def __call__(self, func: F) -> F:
+        def wrapper(*args: Any, **kwargs: Any) -> Any:
             start_time = time.time()
 
             try:
@@ -301,9 +305,9 @@ class DatabaseMetricsDecorator:
                 duration = time.time() - start_time
                 self.metrics.record_database_operation(self.operation, self.table, duration)
 
-        return wrapper
+        return wrapper  # type: ignore[return-value]
 
 
-def database_metrics(operation: str, table: str):
+def database_metrics(operation: str, table: str) -> DatabaseMetricsDecorator:
     """Decorator for database metrics collection."""
     return DatabaseMetricsDecorator(operation, table)

@@ -1,17 +1,14 @@
-"""
-Base classes for tools.
-"""
+from __future__ import annotations
 
-from typing import Any
+from collections.abc import Mapping
+from typing import Any, Protocol
 
-class BaseTool:
-    """Base class for all tools."""
 
-    def __init__(self, name: str, description: str, schema: dict[str, Any]):
-        self.name = name
-        self.description = description
-        self.schema = schema
+class BaseTool(Protocol):
+    """Common interface for tool adapters."""
 
-    async def run(self, **kwargs) -> Any:
-        """Execute the tool with given parameters."""
-        raise NotImplementedError
+    name: str
+    description: str
+
+    def __call__(self, params: Mapping[str, Any]) -> Any:  # pragma: no cover
+        ...

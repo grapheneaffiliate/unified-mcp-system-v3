@@ -1,0 +1,30 @@
+on: [push, pull_request]
+jobs:
+  ad-runner:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: '3.11' }
+      - run: pip install -r requirements.txt jsonschema
+      # Smoke: params mode
+      - run: |
+          python tools/eliashberg_runner.py --lambda_eff 3.0 --mu_star 0.12 --omega_log_meV 150 --verbose > out.json
+          python - <<'PY'
+          import json, sys, jsonschema
+          schema = json.load(open('schemas/ad-screen-1.schema.json'))
+          data = json.load(open('out.json'))
+          jsonschema.validate(data, schema)
+          ad = data["payload"]["AD"]
+          assert ad["Tc_K"] >= 0
+          PY
+      # Smoke: alpha2F mode + units
+      - run: |
+          printf "80,0.8\n100,1.0\n120,0.8\n" > data/a2F_raman.csv
+          python tools/eliashberg_runner.py --alpha2F_csv data/a2F_raman.csv --units cm-1 --mu_star 0.12 --verbose > out2.json
+          python - <<'PY'
+          import json, jsonschema
+          s = json.load(open('schemas/ad-screen-1.schema.json'))
+          d = json.load(open('out2.json'))
+          jsonschema.validate(d, s)
+          PY

@@ -62,7 +62,7 @@ class Settings(BaseSettings):
     environment: str = Field(default="development", description="Environment (development/production/testing)")
 
     @validator("app_log_level")
-    def validate_log_level(cls, v):
+    def validate_log_level(cls, v: str) -> str:
         """Validate log level."""
         valid_levels = ["debug", "info", "warning", "error", "critical"]
         if v.lower() not in valid_levels:
@@ -70,14 +70,14 @@ class Settings(BaseSettings):
         return v.lower()
 
     @validator("environment")
-    def validate_environment(cls, v):
+    def validate_environment(cls, v: str) -> str:
         """Validate environment setting."""
         if v not in ["development", "production", "testing"]:
             raise ValueError("Environment must be 'development', 'production', or 'testing'")
         return v
 
     @validator("openai_temperature")
-    def validate_temperature(cls, v):
+    def validate_temperature(cls, v: float) -> float:
         """Validate temperature range."""
         if not 0.0 <= v <= 2.0:
             raise ValueError("Temperature must be between 0.0 and 2.0")
