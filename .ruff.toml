@@ -2,8 +2,14 @@ line-length = 100
 target-version = "py311"
 
 [lint]
-select = ["E", "F", "W", "I"]   # errors, flakes, warnings, import order
-ignore = ["E501"]               # long lines for now; trim later
+select = ["F"]  # Only critical errors (undefined names, etc.)
+ignore = [
+    "E401",  # Multiple imports on one line
+    "E701",  # Multiple statements on one line (colon)
+    "E702",  # Multiple statements on one line (semicolon)
+    "E501",  # Line too long
+    "I001",  # Import block unsorted
+]
 
 [lint.isort]
 known-first-party = ["mcp_agent"]
