@@ -1,0 +1,9 @@
+line-length = 100
+target-version = "py311"
+
+[lint]
+select = ["E", "F", "W", "I"]   # errors, flakes, warnings, import order
+ignore = ["E501"]               # long lines for now; trim later
+
+[lint.isort]
+known-first-party = ["mcp_agent"]
