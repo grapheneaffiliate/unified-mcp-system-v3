@@ -23,11 +23,14 @@ except Exception:
 # stdio_client shim -> use streamable HTTP client by default
 try:
     import os
+    import sys
     import types
 
     # Import the http client variants from mcp if available
     try:
-        from mcp.client.streamable_http import streamablehttp_client as _http_client  # type: ignore
+        from mcp.client.streamable_http import (
+            streamablehttp_client as _http_client,  # type: ignore
+        )
         _http_kind = "streamable"
     except Exception:
         try:
@@ -62,7 +65,7 @@ try:
             async with _http_client(url) as res:
                 # streamable_http returns (read, write)
                 # old http client returns (read, write, close)
-                if isinstance(res, (tuple, list)):
+                if isinstance(res, tuple | list):
                     if len(res) >= 2:
                         yield (res[0], res[1])
                         return
@@ -77,8 +80,6 @@ try:
             # Create a stub module and register it
             _stdio_mod = types.ModuleType("mcp.client.stdio")
             _stdio_mod.stdio_client = _stdio_client_shim  # type: ignore[attr-defined]
-            import sys
-
             # Ensure parent packages exist in sys.modules
             if "mcp" not in sys.modules:
                 sys.modules["mcp"] = types.ModuleType("mcp")

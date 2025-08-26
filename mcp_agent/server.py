@@ -1,6 +1,4 @@
-"""
-Main FastAPI server application with all middleware and endpoints.
-"""
+"""Main FastAPI server application with all middleware and endpoints."""
 
 import inspect
 import json
@@ -8,6 +6,19 @@ import json
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import Response
+
+from .config import settings
+from .database.operations import get_database_manager, initialize_database
+from .observability.logging import get_logger, http_logging_middleware, setup_logging
+from .observability.metrics import (
+    get_metrics_content,
+    http_metrics_middleware,
+    setup_metrics,
+)
+from .security.auth import AuthMiddleware
+from .security.rate_limiting import http_rate_limit_middleware
+
+
 # Lightweight JSON-RPC helpers to avoid external dependency on jsonrpcserver
 class Success:
     def __init__(self, result):
@@ -20,12 +31,6 @@ class Error:
         self.message = message
         self.data = data
 
-from .config import settings
-from .database.operations import get_database_manager, initialize_database
-from .observability.logging import http_logging_middleware, get_logger, setup_logging
-from .observability.metrics import http_metrics_middleware, get_metrics_content, setup_metrics
-from .security.auth import AuthMiddleware
-from .security.rate_limiting import http_rate_limit_middleware
 
 # Setup logging first
 setup_logging()
@@ -39,6 +44,7 @@ initialize_database()
 
 # Store registered methods
 methods_dict = {}
+
 
 def method(name: str):
     """Register a method name in our local registry."""
@@ -95,7 +101,7 @@ def create_app() -> FastAPI:
         environment=settings.environment,
         debug=settings.debug,
         host=settings.host,
-        port=settings.port
+        port=settings.port,
     )
 
     return app
@@ -118,7 +124,7 @@ def register_routes(app: FastAPI):
             "sandbox": {
                 "enabled": settings.sandbox_enabled,
                 "network_restrictions": settings.network_restrictions,
-            }
+            },
         }
 
     @app.get("/metrics")
@@ -145,11 +151,13 @@ def register_routes(app: FastAPI):
             request_id = request_data.get("id")
 
             if not method_name or method_name not in methods_dict:
-                response_str = json.dumps({
-                    "jsonrpc": "2.0",
-                    "error": {"code": -32601, "message": "Method not found"},
-                    "id": request_id
-                })
+                response_str = json.dumps(
+                    {
+                        "jsonrpc": "2.0",
+                        "error": {"code": -32601, "message": "Method not found"},
+                        "id": request_id,
+                    }
+                )
             else:
                 target_method = methods_dict[method_name]
 
@@ -161,86 +169,90 @@ def register_routes(app: FastAPI):
                         if isinstance(result, Success | Error):
                             # Convert to proper JSON-RPC response
                             if isinstance(result, Success):
-                                response_str = json.dumps({
-                                    "jsonrpc": "2.0",
-                                    "result": result.result,
-                                    "id": request_id
-                                })
+                                response_str = json.dumps(
+                                    {
+                                        "jsonrpc": "2.0",
+                                        "result": result.result,
+                                        "id": request_id,
+                                    }
+                                )
                             else:
-                                response_str = json.dumps({
-                                    "jsonrpc": "2.0",
-                                    "error": {
-                                        "code": result.code,
-                                        "message": result.message,
-                                        "data": result.data
-                                    },
-                                    "id": request_id
-                                })
+                                response_str = json.dumps(
+                                    {
+                                        "jsonrpc": "2.0",
+                                        "error": {
+                                            "code": result.code,
+                                            "message": result.message,
+                                            "data": result.data,
+                                        },
+                                        "id": request_id,
+                                    }
+                                )
                         else:
                             # Assume successful result
-                            response_str = json.dumps({
-                                "jsonrpc": "2.0",
-                                "result": result,
-                                "id": request_id
-                            })
+                            response_str = json.dumps(
+                                {"jsonrpc": "2.0", "result": result, "id": request_id}
+                            )
 
                     except Exception as e:
                         logger.error("Error executing async method", method=method_name, error=str(e))
-                        response_str = json.dumps({
-                            "jsonrpc": "2.0",
-                            "error": {"code": -32603, "message": "Internal error", "data": str(e)},
-                            "id": request_id
-                        })
+                        response_str = json.dumps(
+                            {
+                                "jsonrpc": "2.0",
+                                "error": {"code": -32603, "message": "Internal error", "data": str(e)},
+                                "id": request_id,
+                            }
+                        )
                 else:
                     # Handle sync methods without external dispatcher
                     try:
                         result = target_method(**params)
 
                         if isinstance(result, Success):
-                            response_str = json.dumps({
-                                "jsonrpc": "2.0",
-                                "result": result.result,
-                                "id": request_id
-                            })
+                            response_str = json.dumps(
+                                {
+                                    "jsonrpc": "2.0",
+                                    "result": result.result,
+                                    "id": request_id,
+                                }
+                            )
                         elif isinstance(result, Error):
-                            response_str = json.dumps({
-                                "jsonrpc": "2.0",
-                                "error": {
-                                    "code": result.code,
-                                    "message": result.message,
-                                    "data": result.data
-                                },
-                                "id": request_id
-                            })
+                            response_str = json.dumps(
+                                {
+                                    "jsonrpc": "2.0",
+                                    "error": {
+                                        "code": result.code,
+                                        "message": result.message,
+                                        "data": result.data,
+                                    },
+                                    "id": request_id,
+                                }
+                            )
                         else:
                             # Assume successful result
-                            response_str = json.dumps({
-                                "jsonrpc": "2.0",
-                                "result": result,
-                                "id": request_id
-                            })
+                            response_str = json.dumps(
+                                {"jsonrpc": "2.0", "result": result, "id": request_id}
+                            )
                     except Exception as e:
                         logger.error("Error executing method", method=method_name, error=str(e))
-                        response_str = json.dumps({
-                            "jsonrpc": "2.0",
-                            "error": {"code": -32603, "message": "Internal error", "data": str(e)},
-                            "id": request_id
-                        })
+                        response_str = json.dumps(
+                            {
+                                "jsonrpc": "2.0",
+                                "error": {"code": -32603, "message": "Internal error", "data": str(e)},
+                                "id": request_id,
+                            }
+                        )
 
         except json.JSONDecodeError as e:
             logger.error("Failed to parse JSON-RPC request", error=str(e))
-            response_str = json.dumps({
-                "jsonrpc": "2.0",
-                "error": {"code": -32700, "message": "Parse error"},
-                "id": None
-            })
+            response_str = json.dumps(
+                {"jsonrpc": "2.0", "error": {"code": -32700, "message": "Parse error"}, "id": None}
+            )
         except Exception as e:
             logger.error("Unexpected error processing JSON-RPC request", error=str(e))
-            response_str = json.dumps({
-                "jsonrpc": "2.0",
-                "error": {"code": -32603, "message": "Internal error"},
-                "id": None
-            })
+            response_str = json.dumps(
+                {"jsonrpc": "2.0", "error": {"code": -32603, "message": "Internal error"}, "id": None}
+            )
 
         logger.debug("Sending JSON-RPC response", response_size=len(response_str))
         return Response(content=response_str, media_type="application/json")
@@ -310,7 +322,7 @@ if __name__ == "__main__":
         "Starting MCP Agent server",
         host=settings.host,
         port=settings.port,
-        environment=settings.environment
+        environment=settings.environment,
     )
 
     uvicorn.run(

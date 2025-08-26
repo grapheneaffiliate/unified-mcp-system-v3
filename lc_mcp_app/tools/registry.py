@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import time
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 from ..clients.mcp_client import MCPClientError
 from ..middleware.metrics import record_error, record_tool_execution
@@ -18,7 +18,7 @@ class ToolAdapter:
     expected by the server, and exposes optional JSON schema metadata.
     """
 
-    def __init__(self, tool: Any, schema: Optional[dict] = None):
+    def __init__(self, tool: Any, schema: dict | None = None):
         self._tool = tool
         self.name: str = getattr(tool, "name", tool.__class__.__name__.lower())
         self.description: str = getattr(tool, "description", "")
@@ -30,7 +30,7 @@ class ToolAdapter:
             if asyncio.iscoroutinefunction(self._tool):
                 return await self._tool(**kwargs)
             # Support tools that implement __call__(params: dict)
-            if hasattr(self._tool, "__call__"):
+            if callable(self._tool):
                 return self._tool(kwargs)
             # Fallback: pass kwargs directly if a run method exists
             if hasattr(self._tool, "run"):
@@ -49,13 +49,13 @@ class ToolRegistry:
     """Simple in-process tool registry with capability metadata."""
 
     def __init__(self) -> None:
-        self._tools: Dict[str, ToolAdapter] = {}
+        self._tools: dict[str, ToolAdapter] = {}
 
     def register(self, adapter: ToolAdapter) -> None:
         self._tools[adapter.name] = adapter
         logger.info("Tool registered", tool=adapter.name)
 
-    def get(self, name: str) -> Optional[ToolAdapter]:
+    def get(self, name: str) -> ToolAdapter | None:
         return self._tools.get(name)
 
     def get_tool_info(self) -> dict:
@@ -65,9 +65,9 @@ class ToolRegistry:
             "names": sorted(self._tools.keys()),
         }
 
-    async def get_capabilities(self) -> List[dict]:
+    async def get_capabilities(self) -> list[dict]:
         """Return MCP-style capabilities list."""
-        caps: List[dict] = []
+        caps: list[dict] = []
         for tool in self._tools.values():
             caps.append(
                 {
@@ -81,10 +81,10 @@ class ToolRegistry:
 
 
 # Global registry instance
-_registry: Optional[ToolRegistry] = None
+_registry: ToolRegistry | None = None
 
 
-def _default_tool_schemas() -> Dict[str, dict]:
+def _default_tool_schemas() -> dict[str, dict]:
     """Define minimal JSON Schemas for tools we ship."""
     return {
         "superconductivity_calculator": {

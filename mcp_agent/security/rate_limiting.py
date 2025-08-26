@@ -4,6 +4,7 @@ Rate limiting middleware using token bucket algorithm.
 
 import time
 from typing import Any
+
 from fastapi.responses import JSONResponse
 
 from ..config import settings
@@ -51,7 +52,7 @@ class RateLimiter:
         self.cleanup_interval = 300  # Clean up old buckets every 5 minutes
         self.last_cleanup = time.time()
 
-    def is_allowed(self, client_id: str, tokens: int = 1) -> tuple[bool, dict[str, any]]:
+    def is_allowed(self, client_id: str, tokens: int = 1) -> tuple[bool, dict[str, Any]]:
         """Check if request is allowed for client."""
         self._cleanup_old_buckets()
 
