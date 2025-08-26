@@ -22,10 +22,33 @@ jobs:
         with:
           python-version: ${{ matrix.python }}
 
-      - name: Install dependencies
+      - name: Install project + runtime/test deps
         run: |
           python -m pip install --upgrade pip
-          pip install -e ".[dev]"
+          # Editable install so imports like lc_mcp_app.* resolve
+          pip install -e . 
+          # Ensure key runtime deps exist even if extras aren't wired
+          pip install "pydantic>=2,<3" "pydantic-settings>=2,<3" "pyyaml>=6" \
+                      "jsonrpcserver>=5" "responses>=0.24"
+
+      - name: Preflight - verify imports and versions
+        run: |
+          python - <<'PY'
+          import sys, pkgutil, importlib
+          def ok(mod):
+              try:
+                  m = importlib.import_module(mod)
+                  print(f"[OK] {mod} -> {getattr(m,'__file__',None)}")
+              except Exception as e:
+                  print(f"[FAIL] {mod}: {e}")
+                  raise
+          print("sys.path[0:5]:", sys.path[:5])
+          for mod in ["lc_mcp_app", "lc_mcp_app.tools.registry",
+                      "mcp_agent", "pydantic_settings", "jsonrpcserver", "responses"]:
+              ok(mod)
+          from lc_mcp_app.tools.registry import get_registry, initialize_tools
+          print("[OK] registry exports:", get_registry, initialize_tools)
+          PY
 
       - name: Generate OpenAPI spec and convert to MCP schemas
         run: |

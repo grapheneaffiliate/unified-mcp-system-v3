@@ -20,11 +20,13 @@ jobs:
         with:
           python-version: "3.11"
 
-      - name: Install repo requirements (best-effort)
+      - name: Install project + runtime deps for smoke
         run: |
-          if [ -f requirements.txt ]; then
-            pip install -r requirements.txt || true
-          fi
+          python -m pip install --upgrade pip
+          # Editable install so imports like lc_mcp_app.* and mcp_agent.* resolve
+          pip install -e .
+          # Ensure key runtime deps exist
+          pip install "pydantic>=2,<3" "pydantic-settings>=2,<3" "pyyaml>=6"
 
       - name: Install photonic-logic from submodule
         run: |
