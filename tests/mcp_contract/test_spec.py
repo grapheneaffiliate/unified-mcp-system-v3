@@ -22,7 +22,7 @@ async def test_mcp_contract():
         async with ClientSession(read, write) as session:
             # Test 1: List tools
             result = await session.list_tools()
-            
+
             # Access tools from the result object
             tools = result.tools if hasattr(result, 'tools') else result
             assert tools, "Server should provide tools"
@@ -32,7 +32,7 @@ async def test_mcp_contract():
                 # Check for input schema (could be inputSchema or input_schema)
                 schema_attr = 'inputSchema' if hasattr(tool, 'inputSchema') else 'input_schema'
                 schema = getattr(tool, schema_attr, None) or {"type": "object"}
-                
+
                 try:
                     jsonschema.Draft2020Validator.check_schema(schema)
                 except jsonschema.SchemaError as e:

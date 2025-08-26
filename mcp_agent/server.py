@@ -366,7 +366,7 @@ def register_mcp_methods():
         """Execute a tool following MCP protocol."""
         tool_name = kwargs.get("name")
         arguments = kwargs.get("arguments", {})
-        
+
         logger.info("MCP tools/call method called", tool=tool_name, arguments=arguments)
 
         if tool_name == "health_check":
@@ -378,29 +378,29 @@ def register_mcp_methods():
                 "database": db_health,
                 "environment": settings.environment,
             }
-            
+
             return Success({"content": [{"type": "text", "text": json.dumps(result, indent=2)}]})
-            
+
         elif tool_name == "read_file":
             import os.path
-            
+
             path = arguments.get("path", "")
             if not path:
                 return Error(-32602, "Invalid params", "path parameter required")
-                
+
             # Security: restrict to safe files
             allowed_files = {"README.md", "pyproject.toml", ".gitignore"}
             base_path = "/app"  # container working directory
-            
+
             if path not in allowed_files:
                 return Error(-32602, "Invalid params", f"Access denied. Allowed files: {', '.join(allowed_files)}")
-                
+
             safe_path = os.path.join(base_path, path)
             normalized_path = os.path.normpath(safe_path)
-            
+
             if not normalized_path.startswith(base_path):
                 return Error(-32602, "Invalid params", "Path traversal not allowed")
-                
+
             try:
                 with open(normalized_path, encoding='utf-8') as f:
                     content = f.read()
@@ -410,7 +410,7 @@ def register_mcp_methods():
             except Exception as e:
                 logger.error("Failed to read file", path=path, error=str(e))
                 return Error(-32603, "Internal error", "Failed to read file")
-                
+
         else:
             return Error(-32601, "Method not found", f"Unknown tool: {tool_name}")
 

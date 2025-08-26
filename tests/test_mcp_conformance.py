@@ -28,7 +28,7 @@ class TestMCPConformance:
             async with ClientSession(read, write) as session:
                 # List available tools
                 result = await session.list_tools()
-                
+
                 # Access tools from the result object
                 tools = result.tools if hasattr(result, 'tools') else result
 
@@ -39,11 +39,11 @@ class TestMCPConformance:
                 for tool in tools:
                     assert hasattr(tool, 'name'), f"Tool missing name: {tool}"
                     assert hasattr(tool, 'description'), f"Tool missing description: {tool.name}"
-                    
+
                     # Check for input schema (could be inputSchema or input_schema)
                     schema_attr = 'inputSchema' if hasattr(tool, 'inputSchema') else 'input_schema'
                     assert hasattr(tool, schema_attr), f"Tool missing input schema: {tool.name}"
-                    
+
                     input_schema = getattr(tool, schema_attr)
 
                     # Validate JSON Schema
