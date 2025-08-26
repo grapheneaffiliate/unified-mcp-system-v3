@@ -1,0 +1,7 @@
+# Tools/modules to dynamically register into MCP
+modules:
+  - name: "plogic-pack"
+    module: "mcp_agent.tools.plogic_bo"
+    register: "register_toolset"
+    enabled: true
+    strict: false   # dev-friendly: skip on error if false

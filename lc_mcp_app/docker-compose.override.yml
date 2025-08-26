@@ -1,0 +1,18 @@
+version: "3.9"
+services:
+  mcp-server:
+    environment:
+      - PLOGIC_SRC=/app/external/photonic-logic/src
+      - PLOGIC_RESULTS=/data/plogic_results
+      - PLOGIC_MAX_WORKERS=4
+      - PLOGIC_TIMEOUT=60
+      - PLOGIC_OBJECTIVE_TIMEOUT=60
+      - PLOGIC_CHAR_TIMEOUT=30
+      - PLOGIC_TRUTH_TIMEOUT=45
+      # - REDIS_URL=redis://redis:6379/0
+    volumes:
+      - ./data/plogic_results:/data/plogic_results
+    # security hardening (uncomment for prod)
+    # read_only: true
+    # cap_drop: [ALL]
+    # tmpfs: [/tmp]
