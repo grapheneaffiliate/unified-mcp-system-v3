@@ -27,6 +27,48 @@ jobs:
           python -m pip install --upgrade pip
           pip install -e ".[dev]"
 
+      - name: Generate OpenAPI spec and convert to MCP schemas
+        run: |
+          # Start server briefly to generate OpenAPI spec
+          python -c "
+          import json
+          from lc_mcp_app.server import create_app
+          app = create_app()
+          spec = app.openapi()
+          with open('openapi.json', 'w') as f:
+              json.dump(spec, f, indent=2)
+          " || echo "OpenAPI generation skipped"
+          
+          # Convert OpenAPI → JSON Schema draft-07 for MCP if spec exists
+          if [ -f openapi.json ]; then
+            npm install -g @openapi-contrib/openapi-schema-to-json-schema ajv-cli
+            npx openapi-schema-to-json-schema openapi.json --output schemas-d4.json || echo "Schema conversion skipped"
+            if [ -f schemas-d4.json ]; then
+              npx ajv-cli migrate -s schemas-d4.json -o schemas-d7.json --spec=draft7 || echo "Schema migration skipped"
+              if [ -f schemas-d7.json ]; then
+                node -e "
+                const fs=require('fs');
+                try {
+                  const s=require('./schemas-d7.json');
+                  const schemas = s.components?.schemas || s;
+                  const tools = Object.entries(schemas).map(([name,schema])=>({
+                    name:\`api_\${name}\`,
+                    description:\`Auto-bridged from OpenAPI\`,
+                    input_schema:{
+                      \$schema:'http://json-schema.org/draft-07/schema#',
+                      ...schema
+                    }
+                  }));
+                  fs.writeFileSync('mcp.tools.generated.json', JSON.stringify(tools,null,2));
+                  console.log('Generated', tools.length, 'MCP tool schemas');
+                } catch(e) {
+                  console.log('Schema bridge generation skipped:', e.message);
+                }
+                " || echo "MCP tool generation skipped"
+              fi
+            fi
+          fi
+
       - name: Lint with ruff
         run: ruff check .
 
