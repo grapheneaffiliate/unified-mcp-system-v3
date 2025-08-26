@@ -311,49 +311,122 @@ def register_mcp_methods():
         """Handles the MCP initialize handshake."""
         logger.info("MCP initialize method called", params=kwargs)
 
-        # In production, you might want to validate the secret key here
-        # For now, we'll accept any initialization
+        # Return proper MCP protocol version and capabilities
+        return Success({
+            "protocolVersion": "2024-11-05",
+            "capabilities": {
+                "tools": {},
+                "resources": {},
+                "prompts": {}
+            },
+            "serverInfo": {
+                "name": "mcp-agent-server",
+                "version": "1.0.0"
+            }
+        })
 
-        return Success({"protocol_version": "2024-11-05"})
+    @method(name="tools/list")
+    def tools_list(**kwargs):
+        """Lists available tools following MCP protocol."""
+        logger.info("MCP tools/list method called")
 
-    @method(name="capabilities/list")
-    def capabilities_list(**kwargs):
-        """Lists the capabilities offered by the server."""
-        logger.info("MCP capabilities/list method called")
-
-        # This is a simplified version - in the full implementation,
-        # you would import and register all your tools here
-        capabilities = [
+        # Define tools with proper MCP schema
+        tools = [
             {
-                "type": "tool",
                 "name": "health_check",
                 "description": "Check server health status",
                 "inputSchema": {
                     "type": "object",
                     "properties": {},
                     "required": [],
+                    "additionalProperties": False
+                },
+            },
+            {
+                "name": "read_file",
+                "description": "Read contents of a file",
+                "inputSchema": {
+                    "type": "object",
+                    "properties": {
+                        "path": {
+                            "type": "string",
+                            "description": "Path to the file to read"
+                        }
+                    },
+                    "required": ["path"],
+                    "additionalProperties": False
                 },
             }
         ]
 
-        return Success({"capabilities": capabilities})
+        return Success({"tools": tools})
 
-    @method(name="tool/health_check")
-    def tool_health_check(**kwargs):
-        """Simple health check tool."""
-        logger.info("Health check tool called")
+    @method(name="tools/call")
+    async def tools_call(**kwargs):
+        """Execute a tool following MCP protocol."""
+        tool_name = kwargs.get("name")
+        arguments = kwargs.get("arguments", {})
+        
+        logger.info("MCP tools/call method called", tool=tool_name, arguments=arguments)
 
-        db_manager = get_database_manager()
-        db_health = db_manager.health_check()
+        if tool_name == "health_check":
+            db_manager = get_database_manager()
+            db_health = db_manager.health_check()
 
-        result = {
-            "status": "healthy" if db_health["status"] == "healthy" else "degraded",
-            "timestamp": "2025-01-01T00:00:00Z",  # You'd use actual timestamp
-            "database": db_health,
-            "environment": settings.environment,
-        }
+            result = {
+                "status": "healthy" if db_health["status"] == "healthy" else "degraded",
+                "database": db_health,
+                "environment": settings.environment,
+            }
+            
+            return Success({"content": [{"type": "text", "text": json.dumps(result, indent=2)}]})
+            
+        elif tool_name == "read_file":
+            import os.path
+            
+            path = arguments.get("path", "")
+            if not path:
+                return Error(-32602, "Invalid params", "path parameter required")
+                
+            # Security: restrict to safe files
+            allowed_files = {"README.md", "pyproject.toml", ".gitignore"}
+            base_path = "/app"  # container working directory
+            
+            if path not in allowed_files:
+                return Error(-32602, "Invalid params", f"Access denied. Allowed files: {', '.join(allowed_files)}")
+                
+            safe_path = os.path.join(base_path, path)
+            normalized_path = os.path.normpath(safe_path)
+            
+            if not normalized_path.startswith(base_path):
+                return Error(-32602, "Invalid params", "Path traversal not allowed")
+                
+            try:
+                with open(normalized_path, encoding='utf-8') as f:
+                    content = f.read()
+                return Success({"content": [{"type": "text", "text": content}]})
+            except FileNotFoundError:
+                return Error(-32602, "Invalid params", f"File not found: {path}")
+            except Exception as e:
+                logger.error("Failed to read file", path=path, error=str(e))
+                return Error(-32603, "Internal error", "Failed to read file")
+                
+        else:
+            return Error(-32601, "Method not found", f"Unknown tool: {tool_name}")
 
-        return Success(result)
+    @method(name="resources/list")
+    def resources_list(**kwargs):
+        """List available resources."""
+        logger.info("MCP resources/list method called")
+        # No resources for now
+        return Success({"resources": []})
+
+    @method(name="prompts/list")
+    def prompts_list(**kwargs):
+        """List available prompts."""
+        logger.info("MCP prompts/list method called")
+        # No prompts for now
+        return Success({"prompts": []})
 
 
 # Create the application instance

@@ -21,12 +21,18 @@ async def test_mcp_contract():
     async with stdio_client() as (read, write):
         async with ClientSession(read, write) as session:
             # Test 1: List tools
-            tools = await session.list_tools()
+            result = await session.list_tools()
+            
+            # Access tools from the result object
+            tools = result.tools if hasattr(result, 'tools') else result
             assert tools, "Server should provide tools"
 
             # Test 2: Validate tool schemas
             for tool in tools:
-                schema = tool.input_schema or {"type": "object"}
+                # Check for input schema (could be inputSchema or input_schema)
+                schema_attr = 'inputSchema' if hasattr(tool, 'inputSchema') else 'input_schema'
+                schema = getattr(tool, schema_attr, None) or {"type": "object"}
+                
                 try:
                     jsonschema.Draft2020Validator.check_schema(schema)
                 except jsonschema.SchemaError as e:
@@ -36,13 +42,15 @@ async def test_mcp_contract():
             if tools:
                 # Find a safe tool to test
                 safe_tool = next(
-                    (t for t in tools if t.name in ['list_files', 'ping', 'get_system_info']),
+                    (t for t in tools if t.name in ['list_files', 'ping', 'get_system_info', 'health_check']),
                     tools[0]
                 )
 
                 try:
                     if safe_tool.name == 'list_files':
                         result = await session.call_tool(safe_tool.name, {"path": "."})
+                    elif safe_tool.name == 'health_check':
+                        result = await session.call_tool(safe_tool.name, {})
                     else:
                         result = await session.call_tool(safe_tool.name, {})
 
