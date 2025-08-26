@@ -136,6 +136,28 @@ def register_routes(app: FastAPI):
         content, content_type = get_metrics_content()
         return Response(content=content, media_type=content_type)
 
+    @app.post("/tools/read_file")
+    async def read_file_tool(request: Request):
+        """Read file tool endpoint for smoke tests."""
+        try:
+            request_data = await request.json()
+            path = request_data.get("path", "")
+            
+            if not path:
+                return {"error": "path parameter required"}
+            
+            # Simple file read for smoke test
+            try:
+                with open(path, 'r', encoding='utf-8') as f:
+                    content = f.read()
+                return {"content": content, "path": path}
+            except FileNotFoundError:
+                return {"error": f"File not found: {path}"}
+            except Exception as e:
+                return {"error": f"Failed to read file: {str(e)}"}
+        except Exception as e:
+            return {"error": f"Invalid request: {str(e)}"}
+
     @app.post("/jsonrpc")
     async def jsonrpc_endpoint(request: Request):
         """JSON-RPC endpoint for MCP protocol."""
