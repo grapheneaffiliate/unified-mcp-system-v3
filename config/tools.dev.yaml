@@ -1,0 +1,7 @@
+# Development configuration - graceful degradation
+modules:
+  - name: "plogic-pack"
+    module: "mcp_agent.tools.plogic_bo"
+    register: "register_toolset"
+    enabled: true
+    strict: false   # Dev: skip on error for flexibility

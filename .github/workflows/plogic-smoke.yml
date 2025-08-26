@@ -1,0 +1,132 @@
+name: plogic-smoke
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          submodules: true
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install project + runtime deps for smoke
+        run: |
+          python -m pip install --upgrade pip
+          # Editable install so imports like lc_mcp_app.* and mcp_agent.* resolve
+          pip install -e .
+          # Ensure key runtime deps exist
+          pip install "pydantic>=2,<3" "pydantic-settings>=2,<3" "pyyaml>=6"
+
+      - name: Install photonic-logic from submodule
+        run: |
+          pip install -e external/photonic-logic
+          echo "PLOGIC_SRC=$GITHUB_WORKSPACE/external/photonic-logic/src" >> $GITHUB_ENV
+
+      - name: Install optional extras
+        run: |
+          if [ -f requirements-optional.txt ]; then
+            pip install -r requirements-optional.txt || true
+          else
+            pip install scikit-optimize prometheus-client || true
+          fi
+          sudo apt-get update && sudo apt-get install -y jq
+
+      - name: Validate CLI output format
+        run: |
+          python - << 'PY'
+          import json, subprocess, sys, re
+          p = subprocess.run([sys.executable, "-m", "plogic.cli", "characterize"],
+                             capture_output=True, text=True)
+          out = (p.stdout or "") + (p.stderr or "")
+          # Find first JSON object in mixed output
+          m = re.search(r'\{.*\}', out, re.S)
+          if not m:
+              print(out)
+              raise SystemExit("No JSON object found in characterize output")
+          json.loads(m.group(0))  # will raise if invalid
+          print("characterize JSON OK")
+          PY
+
+      - name: Validate CSV output format
+        run: |
+          python - << 'PY'
+          import csv, subprocess, sys
+          p = subprocess.run([sys.executable, "-m", "plogic.cli", "truth-table", "--ctrl", "0.0", "--ctrl", "0.001", "--ctrl", "0.002", "--out", "tmp.csv"])
+          if p.returncode != 0:
+              raise SystemExit("truth-table CLI returned non-zero exit")
+          with open("tmp.csv") as f:
+              r = csv.reader(f)
+              header = next(r)
+              # Accept either P_ctrl or P_ctrl_W (different photonic-logic versions)
+              has_ctrl = any("P_ctrl" in col for col in header)
+              has_through = "T_through" in header
+              assert has_ctrl and has_through, f"Expected P_ctrl* and T_through in header: {header}"
+          print("CSV header OK:", header)
+          PY
+
+      - name: Create smoke script
+        run: |
+          mkdir -p scripts
+          cat > scripts/ci_smoke_plogic.py << 'PY'
+          import os, sys, json, asyncio
+          from pathlib import Path
+          sys.path.append(str(Path(".").resolve()))
+          from mcp_agent.tools import plogic_bo as T
+          async def main():
+            health = await T.plogic_health()
+            print("HEALTH:", json.dumps(health, indent=2))
+            if health.get("status") != "healthy":
+              raise SystemExit("photonic-logic CLI health check failed")
+            tt = await T.plogic_truth_table(ctrl=[0.0, 0.001, 0.002])
+            print("TRUTH_TABLE rows:", len(tt.get("rows", [])))
+            assert len(tt.get("rows", [])) == 3, "Expected 3 truth table rows"
+            bo = await T.plogic_bo_run(
+              n_calls=4,
+              threshold="soft",
+              xpm_mode="physics",
+              objective_margin_weight=0.1,
+              random_starts=2
+            )
+            print("BO TRACE COUNT:", bo.get("trace_count"))
+            print("BO BEST OBJECTIVE:", bo.get("best", {}).get("objective"))
+            assert bo.get("trace_count", 0) >= 1, "BO trace should be non-empty"
+            results_dir = os.getenv("PLOGIC_RESULTS", "/data/plogic_results")
+            print("Results dir:", results_dir)
+            Path(results_dir).mkdir(parents=True, exist_ok=True)
+            print("SMOKE OK")
+          if __name__ == "__main__":
+            asyncio.run(main())
+          PY
+
+      - name: Run smoke
+        env:
+          PLOGIC_TIMEOUT: "30"
+          PLOGIC_CHAR_TIMEOUT: "20"
+          PLOGIC_TRUTH_TIMEOUT: "25"
+          PLOGIC_OBJECTIVE_TIMEOUT: "30"
+          PLOGIC_RESULTS: "${{ github.workspace }}/plogic_results"
+        run: |
+          python scripts/ci_smoke_plogic.py
+          echo "Artifacts in $PLOGIC_RESULTS (if any)"
+          ls -la "$PLOGIC_RESULTS" || true
+
+      - name: Upload artifacts (optional)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: plogic-smoke-results
+          path: |
+            plogic_results
+            scripts/ci_smoke_plogic.py
+          if-no-files-found: ignore

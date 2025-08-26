@@ -1,0 +1,3 @@
+[submodule "external/photonic-logic"]
+	path = external/photonic-logic
+	url = https://github.com/grapheneaffiliate/photonic-logic

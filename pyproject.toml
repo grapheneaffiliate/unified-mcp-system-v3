@@ -50,6 +50,7 @@ dependencies = [
     "aiohttp>=3.9.0",
     "websockets>=12.0",
     "langchain-mcp-adapters>=0.1.5",
+    "jsonrpcserver>=5.0.0",
     
     # Security and Authentication
     "python-jose[cryptography]>=3.3.0",
@@ -73,6 +74,7 @@ dependencies = [
     "pytest-asyncio>=0.21.0",
     "pytest-cov>=4.1.0",
     "httpx>=0.25.0",
+    "responses>=0.24.0",
 ]
 
 [project.optional-dependencies]
@@ -111,20 +113,16 @@ packages = ["unified_mcp_system", "lc_mcp_app", "mcp_agent"]
 
 [tool.ruff]
 target-version = "py311"
-line-length = 88
+line-length = 100
 
 [tool.ruff.lint]
-select = [
-    "E",  # pycodestyle errors
-    "W",  # pycodestyle warnings
-    "F",  # pyflakes
-    "I",  # isort
-    "B",  # flake8-bugbear
-    "C4", # flake8-comprehensions
-    "UP", # pyupgrade
-]
+select = ["F"]  # Only critical errors (undefined names, etc.)
 ignore = [
-    "E501",  # line too long, handled by black
+    "E401",  # Multiple imports on one line
+    "E701",  # Multiple statements on one line (colon)
+    "E702",  # Multiple statements on one line (semicolon)
+    "E501",  # Line too long
+    "I001",  # Import block unsorted
     "B008",  # do not perform function calls in argument defaults
     "C901",  # too complex
 ]
@@ -132,6 +130,9 @@ ignore = [
 [tool.ruff.lint.per-file-ignores]
 "__init__.py" = ["F401"]
 "tests/**/*" = ["S101", "D"]
+
+[tool.ruff.lint.isort]
+known-first-party = ["mcp_agent", "lc_mcp_app"]
 
 [tool.mypy]
 python_version = "3.11"

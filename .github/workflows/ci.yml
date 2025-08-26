@@ -22,10 +22,75 @@ jobs:
         with:
           python-version: ${{ matrix.python }}
 
-      - name: Install dependencies
+      - name: Install project + runtime/test deps
         run: |
           python -m pip install --upgrade pip
-          pip install -e ".[dev]"
+          # Editable install so imports like lc_mcp_app.* resolve
+          pip install -e . 
+          # Ensure key runtime deps exist even if extras aren't wired
+          pip install "pydantic>=2,<3" "pydantic-settings>=2,<3" "pyyaml>=6" \
+                      "jsonrpcserver>=5" "responses>=0.24"
+
+      - name: Preflight - verify imports and versions
+        run: |
+          python - <<'PY'
+          import sys, pkgutil, importlib
+          def ok(mod):
+              try:
+                  m = importlib.import_module(mod)
+                  print(f"[OK] {mod} -> {getattr(m,'__file__',None)}")
+              except Exception as e:
+                  print(f"[FAIL] {mod}: {e}")
+                  raise
+          print("sys.path[0:5]:", sys.path[:5])
+          for mod in ["lc_mcp_app", "lc_mcp_app.tools.registry",
+                      "mcp_agent", "pydantic_settings", "jsonrpcserver", "responses"]:
+              ok(mod)
+          from lc_mcp_app.tools.registry import get_registry, initialize_tools
+          print("[OK] registry exports:", get_registry, initialize_tools)
+          PY
+
+      - name: Generate OpenAPI spec and convert to MCP schemas
+        run: |
+          # Start server briefly to generate OpenAPI spec
+          python -c "
+          import json
+          from lc_mcp_app.server import create_app
+          app = create_app()
+          spec = app.openapi()
+          with open('openapi.json', 'w') as f:
+              json.dump(spec, f, indent=2)
+          " || echo "OpenAPI generation skipped"
+          
+          # Convert OpenAPI → JSON Schema draft-07 for MCP if spec exists
+          if [ -f openapi.json ]; then
+            npm install -g @openapi-contrib/openapi-schema-to-json-schema ajv-cli
+            npx openapi-schema-to-json-schema openapi.json --output schemas-d4.json || echo "Schema conversion skipped"
+            if [ -f schemas-d4.json ]; then
+              npx ajv-cli migrate -s schemas-d4.json -o schemas-d7.json --spec=draft7 || echo "Schema migration skipped"
+              if [ -f schemas-d7.json ]; then
+                node -e "
+                const fs=require('fs');
+                try {
+                  const s=require('./schemas-d7.json');
+                  const schemas = s.components?.schemas || s;
+                  const tools = Object.entries(schemas).map(([name,schema])=>({
+                    name:\`api_\${name}\`,
+                    description:\`Auto-bridged from OpenAPI\`,
+                    input_schema:{
+                      \$schema:'http://json-schema.org/draft-07/schema#',
+                      ...schema
+                    }
+                  }));
+                  fs.writeFileSync('mcp.tools.generated.json', JSON.stringify(tools,null,2));
+                  console.log('Generated', tools.length, 'MCP tool schemas');
+                } catch(e) {
+                  console.log('Schema bridge generation skipped:', e.message);
+                }
+                " || echo "MCP tool generation skipped"
+              fi
+            fi
+          fi
 
       - name: Lint with ruff
         run: ruff check .
