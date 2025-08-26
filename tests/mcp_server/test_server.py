@@ -53,14 +53,16 @@ def test_jsonrpc_initialize(client):
 
     data = response.json()
     assert "result" in data
-    assert data["result"]["protocol_version"] == "2024-11-05"
+    assert data["result"]["protocolVersion"] == "2024-11-05"
+    assert "capabilities" in data["result"]
+    assert "serverInfo" in data["result"]
 
 
-def test_jsonrpc_capabilities_list(client):
-    """Test MCP capabilities/list method."""
+def test_jsonrpc_tools_list(client):
+    """Test MCP tools/list method."""
     payload = {
         "jsonrpc": "2.0",
-        "method": "capabilities/list",
+        "method": "tools/list",
         "params": {},
         "id": 1
     }
@@ -70,16 +72,24 @@ def test_jsonrpc_capabilities_list(client):
 
     data = response.json()
     assert "result" in data
-    assert "capabilities" in data["result"]
-    assert len(data["result"]["capabilities"]) > 0
+    assert "tools" in data["result"]
+    assert len(data["result"]["tools"]) > 0
+    # Check that tools have proper structure
+    for tool in data["result"]["tools"]:
+        assert "name" in tool
+        assert "description" in tool
+        assert "inputSchema" in tool
 
 
 def test_jsonrpc_health_check_tool(client):
     """Test health check tool via JSON-RPC."""
     payload = {
         "jsonrpc": "2.0",
-        "method": "tool/health_check",
-        "params": {},
+        "method": "tools/call",
+        "params": {
+            "name": "health_check",
+            "arguments": {}
+        },
         "id": 1
     }
 
@@ -88,7 +98,9 @@ def test_jsonrpc_health_check_tool(client):
 
     data = response.json()
     assert "result" in data
-    assert data["result"]["status"] in ["healthy", "degraded"]
+    assert "content" in data["result"]
+    assert len(data["result"]["content"]) > 0
+    assert data["result"]["content"][0]["type"] == "text"
 
 
 def test_jsonrpc_invalid_method(client):
