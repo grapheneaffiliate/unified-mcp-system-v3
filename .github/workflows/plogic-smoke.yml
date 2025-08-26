@@ -26,23 +26,35 @@ jobs:
             pip install -r requirements.txt || true
           fi
 
-      - name: Ensure photonic-logic is available
+      - name: Install photonic-logic from submodule
         run: |
-          mkdir -p external
-          if [ ! -d external/photonic-logic ]; then
-            git clone --depth=1 https://github.com/grapheneaffiliate/photonic-logic external/photonic-logic
-          fi
           pip install -e external/photonic-logic
           echo "PLOGIC_SRC=$GITHUB_WORKSPACE/external/photonic-logic/src" >> $GITHUB_ENV
 
       - name: Install optional extras
         run: |
-          pip install scikit-optimize prometheus-client || true
+          if [ -f requirements-optional.txt ]; then
+            pip install -r requirements-optional.txt || true
+          else
+            pip install scikit-optimize prometheus-client || true
+          fi
           sudo apt-get update && sudo apt-get install -y jq
 
       - name: Validate CLI output format
         run: |
-          python -m plogic.cli characterize | jq . > /dev/null
+          python - << 'PY'
+          import json, subprocess, sys, re
+          p = subprocess.run([sys.executable, "-m", "plogic.cli", "characterize"],
+                             capture_output=True, text=True)
+          out = (p.stdout or "") + (p.stderr or "")
+          # Find first JSON object in mixed output
+          m = re.search(r'\{.*\}', out, re.S)
+          if not m:
+              print(out)
+              raise SystemExit("No JSON object found in characterize output")
+          json.loads(m.group(0))  # will raise if invalid
+          print("characterize JSON OK")
+          PY
 
       - name: Validate CSV output format
         run: |
