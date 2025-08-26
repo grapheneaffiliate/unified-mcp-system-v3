@@ -194,12 +194,12 @@ def register_routes(app: FastAPI):
                                 {"jsonrpc": "2.0", "result": result, "id": request_id}
                             )
 
-                    except Exception as e:
-                        logger.error("Error executing async method", method=method_name, error=str(e))
+                    except Exception:
+                        logger.error("Error executing async method", method=method_name, exc_info=True)
                         response_str = json.dumps(
                             {
                                 "jsonrpc": "2.0",
-                                "error": {"code": -32603, "message": "Internal error", "data": str(e)},
+                                "error": {"code": -32603, "message": "Internal error"},
                                 "id": request_id,
                             }
                         )
