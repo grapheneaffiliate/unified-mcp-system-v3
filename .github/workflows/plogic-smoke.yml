@@ -66,7 +66,10 @@ jobs:
           with open("tmp.csv") as f:
               r = csv.reader(f)
               header = next(r)
-              assert "P_ctrl" in header and "T_through" in header, f"Unexpected CSV header: {header}"
+              # Accept either P_ctrl or P_ctrl_W (different photonic-logic versions)
+              has_ctrl = any("P_ctrl" in col for col in header)
+              has_through = "T_through" in header
+              assert has_ctrl and has_through, f"Expected P_ctrl* and T_through in header: {header}"
           print("CSV header OK:", header)
           PY
 
