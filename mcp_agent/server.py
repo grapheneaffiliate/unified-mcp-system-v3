@@ -140,39 +140,41 @@ def register_routes(app: FastAPI):
     async def read_file_tool(request: Request):
         """Read file tool endpoint for smoke tests."""
         import os.path
-        
+
         try:
             request_data = await request.json()
             path = request_data.get("path", "")
-            
+
             if not path:
                 return {"error": "path parameter required"}
-            
+
             # Security: restrict to safe files for smoke test
             allowed_files = {"README.md", "pyproject.toml", ".gitignore"}
             base_path = "/app"  # container working directory
-            
+
             # Normalize and validate path
             if path not in allowed_files:
                 return {"error": f"Access denied. Allowed files: {', '.join(allowed_files)}"}
-            
+
             safe_path = os.path.join(base_path, path)
             normalized_path = os.path.normpath(safe_path)
-            
+
             # Ensure path is within base directory
             if not normalized_path.startswith(base_path):
                 return {"error": "Path traversal not allowed"}
-            
+
             try:
-                with open(normalized_path, 'r', encoding='utf-8') as f:
+                with open(normalized_path, encoding='utf-8') as f:
                     content = f.read()
                 return {"content": content, "path": path}
             except FileNotFoundError:
                 return {"error": f"File not found: {path}"}
             except Exception as e:
-                return {"error": f"Failed to read file: {str(e)}"}
+                logger.error("Failed to read file in read_file_tool", path=path, error=str(e), exc_info=True)
+                return {"error": "Failed to read file"}
         except Exception as e:
-            return {"error": f"Invalid request: {str(e)}"}
+            logger.error("Invalid request in read_file_tool", error=str(e), exc_info=True)
+            return {"error": "Invalid request"}
 
     @app.post("/jsonrpc")
     async def jsonrpc_endpoint(request: Request):
