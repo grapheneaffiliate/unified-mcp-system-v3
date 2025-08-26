@@ -176,6 +176,11 @@ def register_routes(app: FastAPI):
             logger.error("Invalid request in read_file_tool", error=str(e), exc_info=True)
             return {"error": "Invalid request"}
 
+    @app.post("/mcp")
+    async def mcp_endpoint(request: Request):
+        """MCP protocol endpoint."""
+        return await jsonrpc_endpoint(request)
+
     @app.post("/jsonrpc")
     async def jsonrpc_endpoint(request: Request):
         """JSON-RPC endpoint for MCP protocol."""
