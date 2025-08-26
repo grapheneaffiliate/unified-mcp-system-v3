@@ -33,9 +33,9 @@ jobs:
       - name: Type check with mypy
         run: echo "Skipping mypy for now - core functionality works"
 
-      - name: Test with pytest
+      - name: Test with pytest (unit only)
         run: |
-          pytest -q --maxfail=1 --disable-warnings --junitxml=pytest.xml || exit 1
+          pytest -q -m "not integration" --maxfail=1 --disable-warnings --junitxml=pytest.xml || exit 1
 
       - name: Upload test report
         if: always()

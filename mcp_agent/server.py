@@ -8,15 +8,24 @@ import json
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import Response
-from jsonrpcserver import Error, Success, dispatch
-from jsonrpcserver import method as jsonrpc_method
+# Lightweight JSON-RPC helpers to avoid external dependency on jsonrpcserver
+class Success:
+    def __init__(self, result):
+        self.result = result
+
+
+class Error:
+    def __init__(self, code: int, message: str, data=None):
+        self.code = code
+        self.message = message
+        self.data = data
 
 from .config import settings
 from .database.operations import get_database_manager, initialize_database
-from .observability.logging import LoggingMiddleware, get_logger, setup_logging
-from .observability.metrics import MetricsMiddleware, get_metrics_content, setup_metrics
+from .observability.logging import http_logging_middleware, get_logger, setup_logging
+from .observability.metrics import http_metrics_middleware, get_metrics_content, setup_metrics
 from .security.auth import AuthMiddleware
-from .security.rate_limiting import RateLimitMiddleware
+from .security.rate_limiting import http_rate_limit_middleware
 
 # Setup logging first
 setup_logging()
@@ -32,10 +41,10 @@ initialize_database()
 methods_dict = {}
 
 def method(name: str):
-    """Register a method with both our dictionary and jsonrpcserver."""
+    """Register a method name in our local registry."""
     def decorator(func):
         methods_dict[name] = func
-        return jsonrpc_method(name)(func)
+        return func
     return decorator
 
 
@@ -71,9 +80,9 @@ def create_app() -> FastAPI:
     if settings.is_production:
         app.middleware("http")(AuthMiddleware)
 
-    app.middleware("http")(RateLimitMiddleware)
-    app.middleware("http")(MetricsMiddleware)
-    app.middleware("http")(LoggingMiddleware)
+    app.middleware("http")(http_rate_limit_middleware)
+    app.middleware("http")(http_metrics_middleware)
+    app.middleware("http")(http_logging_middleware)
 
     # Register routes
     register_routes(app)
@@ -183,8 +192,40 @@ def register_routes(app: FastAPI):
                             "id": request_id
                         })
                 else:
-                    # Handle sync methods using jsonrpcserver dispatch
-                    response_str = dispatch(request_str, methods=methods_dict)
+                    # Handle sync methods without external dispatcher
+                    try:
+                        result = target_method(**params)
+
+                        if isinstance(result, Success):
+                            response_str = json.dumps({
+                                "jsonrpc": "2.0",
+                                "result": result.result,
+                                "id": request_id
+                            })
+                        elif isinstance(result, Error):
+                            response_str = json.dumps({
+                                "jsonrpc": "2.0",
+                                "error": {
+                                    "code": result.code,
+                                    "message": result.message,
+                                    "data": result.data
+                                },
+                                "id": request_id
+                            })
+                        else:
+                            # Assume successful result
+                            response_str = json.dumps({
+                                "jsonrpc": "2.0",
+                                "result": result,
+                                "id": request_id
+                            })
+                    except Exception as e:
+                        logger.error("Error executing method", method=method_name, error=str(e))
+                        response_str = json.dumps({
+                            "jsonrpc": "2.0",
+                            "error": {"code": -32603, "message": "Internal error", "data": str(e)},
+                            "id": request_id
+                        })
 
         except json.JSONDecodeError as e:
             logger.error("Failed to parse JSON-RPC request", error=str(e))

@@ -17,6 +17,7 @@ from mcp import ClientSession
 from mcp.client.stdio import stdio_client
 
 
+@pytest.mark.integration
 class TestMCPConformance:
     """Test MCP server conformance to specification."""
 

@@ -50,6 +50,7 @@ dependencies = [
     "aiohttp>=3.9.0",
     "websockets>=12.0",
     "langchain-mcp-adapters>=0.1.5",
+    "jsonrpcserver<5",
     
     # Security and Authentication
     "python-jose[cryptography]>=3.3.0",
@@ -102,12 +103,12 @@ Repository = "https://github.com/grapheneaffiliate/unified-mcp-system"
 Issues = "https://github.com/grapheneaffiliate/unified-mcp-system/issues"
 
 [project.scripts]
-unified-mcp = "unified_mcp_system.cli:main"
-mcp-server = "unified_mcp_system.mcp_agent.cli:main"
-lc-mcp-app = "unified_mcp_system.lc_mcp_app.cli:main"
+unified-mcp = "mcp_agent.cli:server_main"
+mcp-server = "mcp_agent.cli:server_main"
+lc-mcp-app = "lc_mcp_app.cli:server_main"
 
 [tool.hatch.build.targets.wheel]
-packages = ["unified_mcp_system", "lc_mcp_app", "mcp_agent"]
+packages = ["lc_mcp_app", "mcp_agent"]
 
 [tool.ruff]
 target-version = "py311"

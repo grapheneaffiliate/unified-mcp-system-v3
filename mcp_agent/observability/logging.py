@@ -159,3 +159,35 @@ class LoggingMiddleware:
             await send(message)
 
         await self.app(scope, receive, send_wrapper)
+
+
+# Starlette/FASTAPI function-style middleware compatible with app.middleware("http")(func)
+# This avoids issues with BaseHTTPMiddleware expecting (request, call_next) signature.
+async def http_logging_middleware(request, call_next):  # type: ignore[no-untyped-def]
+    logger = get_logger("middleware.logging")
+    corr_id = set_correlation_id()
+
+    # Best-effort headers; request.headers is a case-insensitive mapping
+    try:
+        headers = dict(request.headers)
+    except Exception:
+        headers = {}
+
+    logger.info(
+        "Request started",
+        method=getattr(request, "method", None),
+        path=str(getattr(request, "url", "")),
+        client=getattr(request, "client", None),
+        correlation_id=corr_id,
+        headers=headers,
+    )
+
+    response = await call_next(request)
+
+    logger.info(
+        "Request completed",
+        status_code=getattr(response, "status_code", None),
+        correlation_id=corr_id,
+    )
+
+    return response

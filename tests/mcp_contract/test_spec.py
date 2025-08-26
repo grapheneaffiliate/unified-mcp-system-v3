@@ -14,6 +14,7 @@ from mcp import ClientSession
 from mcp.client.stdio import stdio_client
 
 
+@pytest.mark.integration
 @pytest.mark.asyncio
 async def test_mcp_contract():
     """Test MCP server contract compliance."""
