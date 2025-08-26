@@ -139,6 +139,8 @@ def register_routes(app: FastAPI):
     @app.post("/tools/read_file")
     async def read_file_tool(request: Request):
         """Read file tool endpoint for smoke tests."""
+        import os.path
+        
         try:
             request_data = await request.json()
             path = request_data.get("path", "")
@@ -146,9 +148,23 @@ def register_routes(app: FastAPI):
             if not path:
                 return {"error": "path parameter required"}
             
-            # Simple file read for smoke test
+            # Security: restrict to safe files for smoke test
+            allowed_files = {"README.md", "pyproject.toml", ".gitignore"}
+            base_path = "/app"  # container working directory
+            
+            # Normalize and validate path
+            if path not in allowed_files:
+                return {"error": f"Access denied. Allowed files: {', '.join(allowed_files)}"}
+            
+            safe_path = os.path.join(base_path, path)
+            normalized_path = os.path.normpath(safe_path)
+            
+            # Ensure path is within base directory
+            if not normalized_path.startswith(base_path):
+                return {"error": "Path traversal not allowed"}
+            
             try:
-                with open(path, 'r', encoding='utf-8') as f:
+                with open(normalized_path, 'r', encoding='utf-8') as f:
                     content = f.read()
                 return {"content": content, "path": path}
             except FileNotFoundError:
