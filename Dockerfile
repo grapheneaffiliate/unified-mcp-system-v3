@@ -15,8 +15,10 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 RUN python -m venv /opt/venv
 ENV PATH="/opt/venv/bin:$PATH"
 
-# Copy and install dependencies
-COPY pyproject.toml ./
+# Copy project metadata and sources for editable install
+COPY pyproject.toml README.md ./
+COPY lc_mcp_app/ ./lc_mcp_app/
+COPY mcp_agent/ ./mcp_agent/
 RUN pip install --no-cache-dir --upgrade pip setuptools wheel && \
     pip install --no-cache-dir -e .
 
