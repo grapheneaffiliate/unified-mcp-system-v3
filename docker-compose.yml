@@ -87,17 +87,13 @@ services:
       - redis_data:/data
     restart: unless-stopped
     healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
+      test: ["CMD", "redis-cli", "-h", "127.0.0.1", "ping"]
       interval: 5s
-      timeout: 2s
-      retries: 10
-      start_period: 10s
+      timeout: 5s
+      retries: 20
+      start_period: 30s
     networks:
       - mcp-network
-    security_opt:
-      - no-new-privileges:true
-    cap_drop:
-      - ALL
 
   prometheus:
     image: prom/prometheus:latest
