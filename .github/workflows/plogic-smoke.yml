@@ -1,0 +1,115 @@
+name: plogic-smoke
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          submodules: true
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install repo requirements (best-effort)
+        run: |
+          if [ -f requirements.txt ]; then
+            pip install -r requirements.txt || true
+          fi
+
+      - name: Ensure photonic-logic is available
+        run: |
+          mkdir -p external
+          if [ ! -d external/photonic-logic ]; then
+            git clone --depth=1 https://github.com/grapheneaffiliate/photonic-logic external/photonic-logic
+          fi
+          pip install -e external/photonic-logic
+          echo "PLOGIC_SRC=$GITHUB_WORKSPACE/external/photonic-logic/src" >> $GITHUB_ENV
+
+      - name: Install optional extras
+        run: |
+          pip install scikit-optimize prometheus-client || true
+          sudo apt-get update && sudo apt-get install -y jq
+
+      - name: Validate CLI output format
+        run: |
+          python -m plogic.cli characterize | jq . > /dev/null
+
+      - name: Validate CSV output format
+        run: |
+          python - << 'PY'
+          import csv, subprocess, sys
+          p = subprocess.run([sys.executable, "-m", "plogic.cli", "truth-table", "--ctrl", "0.0", "--ctrl", "0.001", "--ctrl", "0.002", "--out", "tmp.csv"])
+          if p.returncode != 0:
+              raise SystemExit("truth-table CLI returned non-zero exit")
+          with open("tmp.csv") as f:
+              r = csv.reader(f)
+              header = next(r)
+              assert "P_ctrl" in header and "T_through" in header, f"Unexpected CSV header: {header}"
+          print("CSV header OK:", header)
+          PY
+
+      - name: Create smoke script
+        run: |
+          mkdir -p scripts
+          cat > scripts/ci_smoke_plogic.py << 'PY'
+          import os, sys, json, asyncio
+          from pathlib import Path
+          sys.path.append(str(Path(".").resolve()))
+          from mcp_agent.tools import plogic_bo as T
+          async def main():
+            health = await T.plogic_health()
+            print("HEALTH:", json.dumps(health, indent=2))
+            if health.get("status") != "healthy":
+              raise SystemExit("photonic-logic CLI health check failed")
+            tt = await T.plogic_truth_table(ctrl=[0.0, 0.001, 0.002])
+            print("TRUTH_TABLE rows:", len(tt.get("rows", [])))
+            assert len(tt.get("rows", [])) == 3, "Expected 3 truth table rows"
+            bo = await T.plogic_bo_run(
+              n_calls=4,
+              threshold="soft",
+              xpm_mode="physics",
+              objective_margin_weight=0.1,
+              random_starts=2
+            )
+            print("BO TRACE COUNT:", bo.get("trace_count"))
+            print("BO BEST OBJECTIVE:", bo.get("best", {}).get("objective"))
+            assert bo.get("trace_count", 0) >= 1, "BO trace should be non-empty"
+            results_dir = os.getenv("PLOGIC_RESULTS", "/data/plogic_results")
+            print("Results dir:", results_dir)
+            Path(results_dir).mkdir(parents=True, exist_ok=True)
+            print("SMOKE OK")
+          if __name__ == "__main__":
+            asyncio.run(main())
+          PY
+
+      - name: Run smoke
+        env:
+          PLOGIC_TIMEOUT: "30"
+          PLOGIC_CHAR_TIMEOUT: "20"
+          PLOGIC_TRUTH_TIMEOUT: "25"
+          PLOGIC_OBJECTIVE_TIMEOUT: "30"
+          PLOGIC_RESULTS: "${{ github.workspace }}/plogic_results"
+        run: |
+          python scripts/ci_smoke_plogic.py
+          echo "Artifacts in $PLOGIC_RESULTS (if any)"
+          ls -la "$PLOGIC_RESULTS" || true
+
+      - name: Upload artifacts (optional)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: plogic-smoke-results
+          path: |
+            plogic_results
+            scripts/ci_smoke_plogic.py
+          if-no-files-found: ignore
