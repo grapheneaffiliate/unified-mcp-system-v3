@@ -64,6 +64,12 @@ jobs:
           python -m pip install --upgrade pip
           pip install -e ".[dev]"
 
+      - name: Ensure .env exists (CI)
+        run: |
+          if [ ! -f .env ]; then
+            echo "Creating CI .env placeholder"
+            touch .env
+          fi
       - name: Start services
         run: |
           docker compose up -d --build
@@ -89,6 +95,10 @@ jobs:
           MCP_SERVER_URL: http://localhost:8000
           MCP_HEALTH_URL: http://localhost:8000/health
 
+      - name: Ensure .env exists for shutdown (CI)
+        if: always()
+        run: |
+          [ -f .env ] || touch .env
       - name: Stop services
         if: always()
         run: docker compose down
