@@ -3,6 +3,7 @@ Authentication middleware for API key validation.
 """
 
 import os
+
 from fastapi import HTTPException, Request
 
 from ..config import settings
