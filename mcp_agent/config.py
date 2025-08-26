@@ -94,7 +94,11 @@ class Settings(BaseSettings):
         """Ensure directories exist."""
         if isinstance(v, str):
             v = Path(v)
-        v.mkdir(parents=True, exist_ok=True)
+        try:
+            v.mkdir(parents=True, exist_ok=True)
+        except (OSError, PermissionError):
+            # In read-only containers, skip directory creation
+            pass
         return v
 
     @validator("environment")

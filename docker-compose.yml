@@ -23,6 +23,7 @@ services:
       - .env
     volumes:
       - ./data:/app/data:rw
+    working_dir: /app
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "curl", "-fsS", "http://localhost:8000/health"]
@@ -61,6 +62,7 @@ services:
       - .env
     volumes:
       - ./logs:/app/logs:rw
+    working_dir: /app
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "curl", "-fsS", "http://localhost:8001/health"]
