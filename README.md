@@ -138,21 +138,92 @@ pytest -m "not slow"    # Skip slow tests
 ## 📡 API Usage
 
 ### MCP Server (Port 8000)
-Direct MCP protocol communication:
+
+#### Available MCP Tools
+The MCP server provides the following built-in tools:
+
+- **`health_check`**: Check server health status
+  - No parameters required
+  - Returns server status, database health, and environment info
+
+- **`read_file`**: Read contents of allowed files
+  - Parameters: `path` (string) - File path to read
+  - Security: Restricted to allowlisted files (README.md, pyproject.toml, .gitignore)
+
+#### MCP Protocol Endpoints
+- **JSON-RPC Endpoint**: `POST /jsonrpc` or `POST /mcp`
+- **Protocol Version**: `2024-11-05`
+- **Supported Methods**:
+  - `initialize`: Initialize MCP session
+  - `tools/list`: List available tools
+  - `tools/call`: Execute a tool
+  - `resources/list`: List available resources (empty for now)
+  - `prompts/list`: List available prompts (empty for now)
+
+#### Direct MCP Protocol Communication
 ```python
 from mcp import ClientSession
 from mcp.client.stdio import stdio_client
+import os
+
+# Set the MCP server URL
+os.environ['MCP_SERVER_URL'] = 'http://localhost:8000'
 
 # Connect to MCP server
 async with stdio_client() as (read, write):
     async with ClientSession(read, write) as session:
         # List available tools
-        tools = await session.list_tools()
+        result = await session.list_tools()
+        tools = result.tools if hasattr(result, 'tools') else result
         
-        # Call a tool
-        result = await session.call_tool("execute_command", {
-            "command": "ls -la"
+        for tool in tools:
+            print(f"Tool: {tool.name} - {tool.description}")
+        
+        # Call the health_check tool
+        health = await session.call_tool("health_check", {})
+        print(f"Health status: {health}")
+        
+        # Call the read_file tool
+        content = await session.call_tool("read_file", {
+            "path": "README.md"
         })
+        print(f"File content: {content}")
+```
+
+#### Using HTTP Client Directly
+```bash
+# Initialize session
+curl -X POST http://localhost:8000/mcp \
+  -H "Content-Type: application/json" \
+  -d '{
+    "jsonrpc": "2.0",
+    "method": "initialize",
+    "params": {},
+    "id": 1
+  }'
+
+# List available tools
+curl -X POST http://localhost:8000/mcp \
+  -H "Content-Type: application/json" \
+  -d '{
+    "jsonrpc": "2.0",
+    "method": "tools/list",
+    "params": {},
+    "id": 2
+  }'
+
+# Call a tool
+curl -X POST http://localhost:8000/mcp \
+  -H "Content-Type: application/json" \
+  -d '{
+    "jsonrpc": "2.0",
+    "method": "tools/call",
+    "params": {
+      "name": "health_check",
+      "arguments": {}
+    },
+    "id": 3
+  }'
 ```
 
 ### LC MCP App (Port 8001)
