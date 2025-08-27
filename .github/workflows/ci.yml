@@ -158,16 +158,32 @@ jobs:
         with:
           context: .
           push: false
+          load: true  # Load the image into Docker daemon so it can be run
           tags: unified-mcp-system:latest
           cache-from: type=gha
           cache-to: type=gha,mode=max
       - name: Test Docker image
         run: |
-          docker run --rm -d --name test-container -p 8001:8001 unified-mcp-system:latest
+          # Set required environment variables for the container
+          docker run --rm -d --name test-container \
+            -p 8000:8000 -p 8001:8001 \
+            -e MCP_OPENAI_API_KEY=test-key \
+            -e MCP_SECRET_KEY=test-secret \
+            -e MCP_ENVIRONMENT=development \
+            -e REDIS_URL=redis://host.docker.internal:6379 \
+            unified-mcp-system:latest
+          
+          # Wait for services to be healthy
           for i in {1..30}; do
-            if curl -fsS http://localhost:8001/health >/dev/null; then break; fi
+            if curl -fsS http://localhost:8001/health >/dev/null 2>&1; then 
+              echo "Service is healthy"
+              break
+            fi
+            echo "Waiting for service to start... (attempt $i/30)"
             sleep 2
           done
+          
+          # Verify health endpoint
           curl -f http://localhost:8001/health
           docker stop test-container
 
