@@ -3,6 +3,9 @@ Rate limiting middleware using token bucket algorithm.
 """
 
 import time
+from typing import Any
+
+from fastapi.responses import JSONResponse
 
 from ..config import settings
 from ..observability.logging import get_logger
@@ -49,7 +52,7 @@ class RateLimiter:
         self.cleanup_interval = 300  # Clean up old buckets every 5 minutes
         self.last_cleanup = time.time()
 
-    def is_allowed(self, client_id: str, tokens: int = 1) -> tuple[bool, dict[str, any]]:
+    def is_allowed(self, client_id: str, tokens: int = 1) -> tuple[bool, dict[str, Any]]:
         """Check if request is allowed for client."""
         self._cleanup_old_buckets()
 
@@ -102,18 +105,13 @@ rate_limiter = RateLimiter(
 
 
 class RateLimitMiddleware:
-    """FastAPI middleware for rate limiting."""
+    """Legacy class-style middleware kept for backwards compatibility with ASGI signature."""
 
     def __init__(self, app):
         self.app = app
         self.logger = get_logger("middleware.rate_limiting")
         self.rate_limiter = rate_limiter
-
-        # Endpoints exempt from rate limiting
-        self.exempt_endpoints = {
-            "/health",
-            "/metrics",
-        }
+        self.exempt_endpoints = {"/health", "/metrics"}
 
     async def __call__(self, scope, receive, send):
         if scope["type"] != "http":
@@ -121,16 +119,11 @@ class RateLimitMiddleware:
             return
 
         path = scope["path"]
-
-        # Skip rate limiting for exempt endpoints
         if path in self.exempt_endpoints:
             await self.app(scope, receive, send)
             return
 
-        # Get client identifier
-        client_id = self._get_client_id(scope)
-
-        # Check rate limit
+        client_id = _get_client_id_from_scope(scope)
         allowed, rate_info = self.rate_limiter.is_allowed(client_id)
 
         if not allowed:
@@ -139,77 +132,61 @@ class RateLimitMiddleware:
                 client_id=client_id,
                 path=path,
                 remaining=rate_info["remaining"],
-                limit=rate_info["limit"]
+                limit=rate_info["limit"],
             )
-            await self._send_rate_limited(send, rate_info)
+            await _send_rate_limited(send, rate_info)
             return
 
-        # Add rate limit headers to response
         async def send_wrapper(message):
             if message["type"] == "http.response.start":
                 headers = list(message.get("headers", []))
-                headers.extend([
-                    [b"x-ratelimit-limit", str(rate_info["limit"]).encode()],
-                    [b"x-ratelimit-remaining", str(rate_info["remaining"]).encode()],
-                    [b"x-ratelimit-reset", str(rate_info["reset_time"]).encode()],
-                ])
+                headers.extend(
+                    [
+                        [b"x-ratelimit-limit", str(rate_info["limit"]).encode()],
+                        [b"x-ratelimit-remaining", str(rate_info["remaining"]).encode()],
+                        [b"x-ratelimit-reset", str(rate_info["reset_time"]).encode()],
+                    ]
+                )
                 message["headers"] = headers
             await send(message)
 
         await self.app(scope, receive, send_wrapper)
 
-    def _get_client_id(self, scope) -> str:
-        """Get client identifier for rate limiting."""
-        # Try to get real IP from headers (for reverse proxy setups)
-        headers = dict(scope.get("headers", []))
+def _get_client_id_from_scope(scope) -> str:
+    """Get client identifier for rate limiting from ASGI scope."""
+    headers = dict(scope.get("headers", []))
+    forwarded_headers = [b"x-forwarded-for", b"x-real-ip", b"cf-connecting-ip"]
+    for header in forwarded_headers:
+        if header in headers:
+            ip = headers[header].decode().split(",")[0].strip()
+            if ip:
+                return ip
+    client = scope.get("client")
+    if client:
+        return client[0]
+    return "unknown"
 
-        # Check common forwarded headers
-        forwarded_headers = [
-            b"x-forwarded-for",
-            b"x-real-ip",
-            b"cf-connecting-ip",  # Cloudflare
-        ]
 
-        for header in forwarded_headers:
-            if header in headers:
-                ip = headers[header].decode().split(",")[0].strip()
-                if ip:
-                    return ip
+async def _send_rate_limited(send, rate_info: dict[str, Any]):
+    """Send 429 Too Many Requests response for ASGI pipeline."""
+    headers = [
+        [b"content-type", b"application/json"],
+        [b"x-ratelimit-limit", str(rate_info["limit"]).encode()],
+        [b"x-ratelimit-remaining", str(rate_info["remaining"]).encode()],
+        [b"x-ratelimit-reset", str(rate_info["reset_time"]).encode()],
+        [b"retry-after", str(rate_info["reset_time"] - int(time.time())).encode()],
+    ]
+    await send({"type": "http.response.start", "status": 429, "headers": headers})
 
-        # Fall back to direct client IP
-        client = scope.get("client")
-        if client:
-            return client[0]
+    body = {
+        "error": "Rate limit exceeded",
+        "message": f"Too many requests. Limit: {rate_info['limit']} per minute",
+        "retry_after": rate_info["reset_time"] - int(time.time()),
+    }
 
-        return "unknown"
+    import json
 
-    async def _send_rate_limited(self, send, rate_info: dict[str, any]):
-        """Send 429 Too Many Requests response."""
-        headers = [
-            [b"content-type", b"application/json"],
-            [b"x-ratelimit-limit", str(rate_info["limit"]).encode()],
-            [b"x-ratelimit-remaining", str(rate_info["remaining"]).encode()],
-            [b"x-ratelimit-reset", str(rate_info["reset_time"]).encode()],
-            [b"retry-after", str(rate_info["reset_time"] - int(time.time())).encode()],
-        ]
-
-        await send({
-            "type": "http.response.start",
-            "status": 429,
-            "headers": headers,
-        })
-
-        body = {
-            "error": "Rate limit exceeded",
-            "message": f"Too many requests. Limit: {rate_info['limit']} per minute",
-            "retry_after": rate_info["reset_time"] - int(time.time()),
-        }
-
-        import json
-        await send({
-            "type": "http.response.body",
-            "body": json.dumps(body).encode(),
-        })
+    await send({"type": "http.response.body", "body": json.dumps(body).encode()})
 
 
 def get_rate_limiter() -> RateLimiter:
@@ -255,3 +232,49 @@ def rate_limit(requests_per_minute: int = None, window_seconds: int = None):
             return sync_wrapper
 
     return decorator
+
+
+# Function-style middleware compatible with app.middleware("http")(func)
+async def http_rate_limit_middleware(request, call_next):  # type: ignore[no-untyped-def]
+    path = str(getattr(request, "url", "/"))
+    # Exempt endpoints
+    if path.endswith("/health") or path.endswith("/metrics"):
+        return await call_next(request)
+
+    # Determine client id
+    headers = getattr(request, "headers", {})
+    client_id = None
+    for key in ("x-forwarded-for", "x-real-ip", "cf-connecting-ip"):
+        if key in headers:
+            client_id = headers.get(key).split(",")[0].strip()
+            break
+    if not client_id:
+        client = getattr(request, "client", None)
+        client_id = getattr(client, "host", "unknown") if client else "unknown"
+
+    allowed, rate_info = rate_limiter.is_allowed(client_id)
+    if not allowed:
+        retry_after = max(0, rate_info["reset_time"] - int(time.time()))
+        return JSONResponse(
+            status_code=429,
+            content={
+                "error": "Rate limit exceeded",
+                "message": f"Too many requests. Limit: {rate_info['limit']} per minute",
+                "retry_after": retry_after,
+            },
+            headers={
+                "X-RateLimit-Limit": str(rate_info["limit"]),
+                "X-RateLimit-Remaining": str(rate_info["remaining"]),
+                "X-RateLimit-Reset": str(rate_info["reset_time"]),
+                "Retry-After": str(retry_after),
+            },
+        )
+
+    response = await call_next(request)
+    try:
+        response.headers["X-RateLimit-Limit"] = str(rate_info["limit"])
+        response.headers["X-RateLimit-Remaining"] = str(rate_info["remaining"])
+        response.headers["X-RateLimit-Reset"] = str(rate_info["reset_time"])
+    except Exception:
+        pass
+    return response

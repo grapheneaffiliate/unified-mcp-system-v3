@@ -311,3 +311,23 @@ class DatabaseMetricsDecorator:
 def database_metrics(operation: str, table: str) -> DatabaseMetricsDecorator:
     """Decorator for database metrics collection."""
     return DatabaseMetricsDecorator(operation, table)
+
+
+# Function-style HTTP middleware compatible with app.middleware("http")(func)
+# Records request duration, status code, and errors via MetricsCollector.
+async def http_metrics_middleware(request, call_next):  # type: ignore[no-untyped-def]
+    metrics = get_metrics()
+    start_time = time.time()
+    method = getattr(request, "method", "UNKNOWN")
+    path = str(getattr(request, "url", ""))
+    status_code = 500
+    try:
+        response = await call_next(request)
+        status_code = getattr(response, "status_code", 200)
+        return response
+    except Exception as e:
+        metrics.record_error(error_type=type(e).__name__, component="middleware")
+        raise
+    finally:
+        duration = time.time() - start_time
+        metrics.record_request(method, path, status_code, duration)

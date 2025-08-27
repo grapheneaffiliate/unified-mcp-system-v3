@@ -2,6 +2,8 @@
 Authentication middleware for API key validation.
 """
 
+import os
+
 from fastapi import HTTPException, Request
 
 from ..config import settings
@@ -16,6 +18,11 @@ async def require_api_key(request: Request, call_next):
     public_endpoints = {"/health", "/metrics", "/docs", "/openapi.json", "/redoc"}
 
     if request.url.path in public_endpoints:
+        return await call_next(request)
+
+    # Skip auth if disabled for CI/testing
+    if os.getenv("AUTH_DISABLE", "false").lower() == "true":
+        logger.debug("Authentication disabled for CI/testing")
         return await call_next(request)
 
     # Skip auth if no API keys configured (development mode)
