@@ -51,6 +51,25 @@ unified-mcp-system/
 - Function calling support
 - Model selection and routing
 
+## 🛠️ Available MCP Tools
+
+The MCP server provides the following built-in tools:
+
+| Tool | Description | Parameters |
+|------|-------------|------------|
+| **`health_check`** | Check server health status | None - Returns server status, database health, and environment info |
+| **`read_file`** | Read contents of allowed files | `path` (string) - File path to read (restricted to allowlisted files) |
+
+### MCP Protocol Support
+- **Protocol Version**: `2024-11-05`
+- **JSON-RPC Endpoint**: `POST /jsonrpc` or `POST /mcp`
+- **Supported Methods**:
+  - `initialize` - Initialize MCP session
+  - `tools/list` - List available tools
+  - `tools/call` - Execute a tool
+  - `resources/list` - List available resources
+  - `prompts/list` - List available prompts
+
 ## 🚀 Quick Start
 
 ### Prerequisites
